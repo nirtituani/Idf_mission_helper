@@ -1,0 +1,5 @@
+node_modules/
+.env
+# Real rosters must never be committed. Test fixtures are generated in code (test/fixtures/build.js).
+*.xlsx
+*.xls

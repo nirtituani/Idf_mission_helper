@@ -1,0 +1,27 @@
+{
+  "name": "duty-roster",
+  "version": "1.0.0",
+  "description": "Excel duty roster: parse, validate, search who is on duty",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --import ./test/hooks.js --test test/*.test.js",
+    "start": "node server/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "multer": "^2.0.2"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.1",
+    "supertest": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=22.15"
+  }
+}

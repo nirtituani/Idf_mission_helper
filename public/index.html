@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ניהול שיבוץ תורנויות</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1>ניהול שיבוץ תורנויות</h1>
+    <p class="sub">הקובץ שמועלה הוא מקור האמת — אין השלמה או ניחוש של נתונים.</p>
+  </header>
+
+  <main>
+    <section class="card" aria-labelledby="upload-title">
+      <h2 id="upload-title">העלאת קובץ שיבוץ</h2>
+      <form id="upload-form">
+        <label class="drop" for="file">
+          <input id="file" name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+          <span class="drop-text">בחירת קובץ Excel ‏(‎.xlsx‎) או גרירה לכאן</span>
+        </label>
+      </form>
+      <div id="upload-status" class="status" role="status" aria-live="polite"></div>
+    </section>
+
+    <section id="summary" class="card" aria-labelledby="summary-title" hidden>
+      <div class="card-head">
+        <h2 id="summary-title">השיבוץ הפעיל</h2>
+        <button id="delete-btn" type="button" class="btn btn-danger-quiet">מחיקת השיבוץ מהשרת</button>
+      </div>
+      <dl id="summary-list" class="stats"></dl>
+      <div id="week-start" class="week-start"></div>
+    </section>
+
+    <section id="issues" class="card" aria-labelledby="issues-title" hidden>
+      <h2 id="issues-title">שגיאות בקריאת הקובץ</h2>
+      <div id="issues-body"></div>
+    </section>
+
+    <div id="tabs" class="tabs" role="tablist" aria-label="תצוגות">
+      <button type="button" role="tab" id="tab-search" aria-selected="true" aria-controls="view-search">חיפוש לפי תאריך ושעה</button>
+      <button type="button" role="tab" id="tab-shifts" aria-selected="false" aria-controls="view-shifts" tabindex="-1">חיפוש משמרות</button>
+      <button type="button" role="tab" id="tab-soldiers" aria-selected="false" aria-controls="view-soldiers" tabindex="-1">לפי חייל</button>
+      <button type="button" role="tab" id="tab-week" aria-selected="false" aria-controls="view-week" tabindex="-1">לוח שבועי</button>
+    </div>
+
+    <section id="view-week" class="card" role="tabpanel" aria-labelledby="tab-week" hidden>
+      <h2>לוח שבועי</h2>
+      <p id="week-empty" class="empty">יש להעלות קובץ שיבוץ כדי לראות את הלוח השבועי.</p>
+      <div id="week-body" hidden>
+        <div class="week-nav">
+          <button id="week-prev" type="button" class="btn">› שבוע קודם</button>
+          <h3 id="week-title" aria-live="polite"></h3>
+          <button id="week-next" type="button" class="btn">שבוע הבא ‹</button>
+          <span class="week-jump">
+            <button id="week-today" type="button" class="btn">השבוע הנוכחי</button>
+            <button id="week-roster" type="button" class="btn">שבוע השיבוץ</button>
+          </span>
+        </div>
+        <div class="week-filters">
+          <label class="field"><span class="field-label">עמדה / תפקיד <span class="hint">(מתוך הקובץ בלבד)</span></span><select id="week-post"></select></label>
+          <label class="field"><span class="field-label">הדגשת חייל</span><input id="week-person" type="search" autocomplete="off"></label>
+        </div>
+        <p id="week-status" class="muted small" aria-live="polite"></p>
+        <p class="muted small">משמרת מוצגת בכל יום שהיא חלה בו. לחיצה על שיבוץ מציגה פרטים; לחיצה על יום פותחת את החיפוש לפי שעה באותו יום. ⚠ = חייל משובץ בשני שיבוצים חופפים.</p>
+        <div id="week-detail" aria-live="polite"></div>
+        <div id="week-board" class="board-wrap"></div>
+      </div>
+    </section>
+
+    <section id="view-shifts" class="card" role="tabpanel" aria-labelledby="tab-shifts" hidden>
+      <h2>חיפוש משמרות</h2>
+      <p id="shifts-empty" class="empty">יש להעלות קובץ שיבוץ כדי לחפש משמרות.</p>
+      <div id="shifts-body" hidden>
+        <p class="muted small">כל השדות אופציונליים — אפשר לבחור כל שילוב. התוצאות מתעדכנות מיד.</p>
+        <div class="search-grid">
+          <label class="field"><span class="field-label">יום</span><select id="sh-day"></select></label>
+          <label class="field"><span class="field-label">שעה</span><select id="sh-hour"></select></label>
+          <label class="field field-wide"><span class="field-label">עבודה / עמדה <span class="hint">(מתוך הקובץ בלבד)</span></span><select id="sh-post"></select></label>
+          <label class="field"><span class="field-label">חייל</span><input id="sh-soldier" type="search" autocomplete="off"></label>
+        </div>
+        <div class="row-actions shifts-actions">
+          <label class="check"><input type="checkbox" id="sh-empty"> כולל משבצות ריקות בקובץ</label>
+          <button id="sh-reset" type="button" class="btn">ניקוי החיפוש</button>
+        </div>
+        <div id="sh-results" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <section id="view-soldiers" class="card" role="tabpanel" aria-labelledby="tab-soldiers" hidden>
+      <h2>שיבוץ לפי חייל</h2>
+      <p id="soldiers-empty" class="empty">יש להעלות קובץ שיבוץ כדי לראות את השיבוץ לפי חייל.</p>
+      <div id="soldiers-body" hidden>
+        <p class="notice">שליחה ב־WhatsApp עדיין לא מחוברת (נדרש מספר ייעודי והגדרת Meta). כרגע ניתן להכין הודעות, לבדוק אותן ולהעתיק.</p>
+        <details class="template-box">
+          <summary>נוסח ההודעה</summary>
+          <form id="template-form" class="template-form">
+            <p class="muted small">אפשר להשתמש ב־{שם} ובטווח התאריכים {טווח}. רשימת השיבוצים נוספת אוטומטית בין שורת ההקדמה לסיום.</p>
+            <label class="field"><span class="field-label">פתיחה</span><input id="tpl-greeting" maxlength="300"></label>
+            <label class="field"><span class="field-label">שורת הקדמה</span><input id="tpl-intro" maxlength="300"></label>
+            <label class="field"><span class="field-label">סיום</span><input id="tpl-closing" maxlength="300"></label>
+            <div class="row-actions">
+              <button type="submit" class="btn btn-primary">שמירת הנוסח</button>
+              <button type="button" id="tpl-reset" class="btn">חזרה לנוסח ברירת המחדל</button>
+            </div>
+            <p id="tpl-status" class="status" role="status"></p>
+          </form>
+        </details>
+        <div class="soldier-tools">
+          <label class="field"><span class="field-label">חיפוש חייל</span><input id="soldier-filter" type="search" autocomplete="off"></label>
+          <label class="check"><input type="checkbox" id="select-all"> בחירת כל המוצגים</label>
+          <button id="preview-selected" type="button" class="btn btn-primary" disabled>הכנת הודעות לנבחרים</button>
+        </div>
+        <p id="selected-count" class="muted small" aria-live="polite"></p>
+        <ul id="soldier-list" class="soldier-list"></ul>
+        <div id="bulk-preview" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <section id="view-search" class="card" role="tabpanel" aria-labelledby="tab-search">
+      <h2 id="search-title">מי בתורנות? חיפוש לפי תאריך, שעה ועמדה</h2>
+      <p id="search-empty" class="empty">יש להעלות קובץ שיבוץ כדי לחפש.</p>
+      <form id="search-form" class="search-grid" hidden>
+        <div class="field">
+          <span class="field-label" id="date-label">תאריך</span>
+          <div id="date-picker"></div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="hour">שעה עגולה</label>
+          <select id="hour"></select>
+        </div>
+        <div class="field field-wide">
+          <label class="field-label" for="post">עמדה / תפקיד <span class="hint">(מתוך הקובץ בלבד)</span></label>
+          <select id="post"></select>
+        </div>
+        <div class="field field-action">
+          <button type="submit" class="btn btn-primary" id="search-btn">מצא מי בתורנות</button>
+        </div>
+      </form>
+      <p class="semantics">משמרת נחשבת פעילה משעת ההתחלה (כולל) ועד שעת הסיום (לא כולל): משמרת 16:00–20:00 תופיע בחיפוש של 16:00 עד 19:00, ולא ב־20:00.</p>
+      <div id="results" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    הנתונים נשמרים בזיכרון השרת בלבד, משויכים לדפדפן זה, ונמחקים לאחר 8 שעות ללא פעילות (ולכל היותר 24 שעות) או בלחיצה על "מחיקת השיבוץ מהשרת".
+  </footer>
+</body>
+</html>
