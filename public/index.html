@@ -4,13 +4,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ניהול שיבוץ תורנויות</title>
+  <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/styles.css">
   <script type="module" src="/js/app.js"></script>
 </head>
 <body>
   <header class="topbar">
-    <h1>ניהול שיבוץ תורנויות</h1>
-    <p class="sub">הקובץ שמועלה הוא מקור האמת — אין השלמה או ניחוש של נתונים.</p>
+    <div class="brand">
+      <p class="kicker">לוח מבצעים · שבצ״ק</p>
+      <h1>ניהול שיבוץ תורנויות</h1>
+      <p class="sub">הקובץ שמועלה הוא מקור האמת — אין השלמה או ניחוש של נתונים.</p>
+    </div>
+    <div id="active-file" class="stamp" hidden>
+      <span class="stamp-label">שיבוץ פעיל</span>
+      <span id="active-file-name" class="stamp-name"></span>
+      <span id="active-file-range" class="stamp-range"></span>
+    </div>
   </header>
 
   <main>
@@ -19,7 +28,9 @@
       <form id="upload-form">
         <label class="drop" for="file">
           <input id="file" name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
-          <span class="drop-text">בחירת קובץ Excel ‏(‎.xlsx‎) או גרירה לכאן</span>
+          <span class="drop-icon" aria-hidden="true">⇪</span>
+          <span class="drop-title">גררו לכאן את קובץ השיבוץ</span>
+          <span class="drop-text">או לחצו לבחירת קובץ Excel ‏(‎.xlsx‎)</span>
         </label>
       </form>
       <div id="upload-status" class="status" role="status" aria-live="polite"></div>

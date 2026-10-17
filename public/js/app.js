@@ -2,7 +2,7 @@ import { DatePicker, formatLong } from './datepicker.js';
 import { createSoldiersView } from './soldiers-view.js';
 import { createWeekView } from './week-view.js';
 import { createShiftsView } from './shifts-view.js';
-import { assignmentTable, cellChip, el, fillPostSelect, shiftNode, shortDate } from './ui.js';
+import { assignmentTable, cellChip, dayMonth, el, fillPostSelect, ltr, shiftNode, shortDate } from './ui.js';
 import { addDays, dayNumber, formatMinutes, todayIso } from '/core/dates.js';
 
 const $ = (id) => document.getElementById(id);
@@ -80,6 +80,7 @@ function setRoster(roster) {
   if (!roster) {
     $('summary').hidden = true;
     $('issues').hidden = true;
+    $('active-file').hidden = true;
     $('search-form').hidden = true;
     $('search-empty').hidden = false;
     soldiersView.setRoster(null);
@@ -117,14 +118,19 @@ function rosterDates(roster) {
 function renderSummary() {
   const r = state.roster;
   const s = r.summary;
+  // [label, big value, detail]
   const items = [
-    ['קובץ', r.fileName],
-    ['טווח תאריכים', r.dateRange ? `${formatLong(r.dateRange.from)} – ${formatLong(r.dateRange.to)}` : 'לא זוהה'],
-    ['חיילים (שמות שונים)', String(s.soldiers)],
-    ['שיבוצים', `${s.assignments} (${s.timed} עם זמן מוגדר, ${s.unresolved} לא מזוהים)`],
-    ['עמדות / תפקידים', `${s.positions} ב־${s.sections} טבלאות`],
+    ['חיילים', String(s.soldiers), 'שמות שונים לאחר איחוד'],
+    ['שיבוצים', String(s.assignments), s.unresolved ? `${s.unresolved} ללא זמן מזוהה` : 'לכולם זמן מוגדר'],
+    ['עמדות / תפקידים', String(s.positions), `ב־${s.sections} טבלאות`],
+    ['טווח תאריכים', r.dateRange ? `${dayMonth(r.dateRange.from)}–${dayMonth(r.dateRange.to)}` : '—', r.dateRange ? `${formatLong(r.dateRange.from)} עד ${formatLong(r.dateRange.to)}` : 'לא זוהה'],
   ];
-  $('summary-list').replaceChildren(...items.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)]));
+  $('summary-list').replaceChildren(
+    ...items.map(([k, v, d]) => el('div', { class: 'stat' }, el('dt', {}, k), el('dd', {}, el('span', { class: 'stat-value' }, ltr(v)), el('span', { class: 'stat-detail' }, d)))),
+  );
+  $('active-file-name').textContent = r.fileName;
+  $('active-file-range').replaceChildren(r.dateRange ? ltr(`${dayMonth(r.dateRange.from)} – ${dayMonth(r.dateRange.to)}`) : '');
+  $('active-file').hidden = false;
   renderWeekStart();
   $('summary').hidden = false;
 }

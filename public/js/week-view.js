@@ -65,7 +65,10 @@ export function createWeekView({ onShowSoldier, onSearchDay }) {
             if (e.id === selectedId) classes.push('entry-selected');
             if (isHit(e)) hits++;
             const btn = el('button', { type: 'button', class: classes.join(' '), 'data-id': e.id }, el('span', { class: 'entry-time' }, entryTimeLabel(e)));
-            if (e.startsToday && nightText(e)) btn.append(el('span', { class: 'night' }, nightText(e)));
+            if (e.startsToday && nightText(e)) {
+              btn.classList.add('entry-night');
+              btn.append(el('span', { class: 'night' }, `☾ ${nightText(e)}`));
+            }
             btn.append(el('span', { class: 'entry-name' }, e.person));
             btn.addEventListener('click', () => select(e.id));
             td.append(btn);
