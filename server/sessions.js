@@ -8,13 +8,17 @@ import crypto from 'node:crypto';
 
 const hash = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
-export function createSessionStore({ idleTtlMs, maxAgeMs, now = Date.now }) {
+// maxSessions caps memory use on a public server: when full (after dropping expired sessions),
+// create() returns null and the caller refuses the new visitor instead of evicting someone else.
+export function createSessionStore({ idleTtlMs, maxAgeMs, maxSessions = Infinity, now = Date.now }) {
   const sessions = new Map();
 
   const expired = (s) => now() - s.lastAccess > idleTtlMs || now() - s.createdAt > maxAgeMs;
 
-  return {
+  const store = {
     create() {
+      if (sessions.size >= maxSessions) store.sweep();
+      if (sessions.size >= maxSessions) return null;
       const token = crypto.randomBytes(32).toString('base64url');
       sessions.set(hash(token), { createdAt: now(), lastAccess: now(), data: null });
       return token;
@@ -46,4 +50,5 @@ export function createSessionStore({ idleTtlMs, maxAgeMs, now = Date.now }) {
     },
     size: () => sessions.size,
   };
+  return store;
 }

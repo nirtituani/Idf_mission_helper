@@ -178,3 +178,44 @@ test('message preview: per-session, version-checked, uses saved template', async
   assert.equal(reset.body.template.greeting, 'שלום {שם},');
   assert.ok(up2.body.soldiers.length > 0);
 });
+
+test('uploads are rate-limited per client', async () => {
+  const store = createSessionStore({ idleTtlMs: HOUR, maxAgeMs: HOUR });
+  const app = createApp({ store, today: () => '2026-10-17', log: quiet, limits: { uploadsPer10Min: 2, apiPerMinute: 1000 } });
+  const a = request.agent(app);
+  assert.equal((await upload(a, main)).status, 201);
+  assert.equal((await upload(a, main)).status, 201);
+  const third = await upload(a, main);
+  assert.equal(third.status, 429);
+  assert.equal(third.body.error, 'rate');
+});
+
+test('API requests are rate-limited per client', async () => {
+  const store = createSessionStore({ idleTtlMs: HOUR, maxAgeMs: HOUR });
+  const app = createApp({ store, log: quiet, limits: { uploadsPer10Min: 100, apiPerMinute: 3 } });
+  const codes = [];
+  for (let i = 0; i < 4; i++) codes.push((await request(app).get('/api/health')).status);
+  assert.deepEqual(codes, [200, 200, 200, 429]);
+});
+
+test('when the session cap is reached new visitors get 503, existing ones keep working', async () => {
+  const clock = { t: 0 };
+  const store = createSessionStore({ idleTtlMs: HOUR, maxAgeMs: 2 * HOUR, maxSessions: 1, now: () => clock.t });
+  const app = createApp({ store, today: () => '2026-10-17', log: quiet });
+  const first = request.agent(app);
+  assert.equal((await upload(first, main)).status, 201);
+  const second = await upload(request.agent(app), main);
+  assert.equal(second.status, 503);
+  assert.equal(second.body.error, 'busy');
+  assert.equal((await upload(first, main)).status, 201); // same session re-uploads fine
+  clock.t += HOUR + 1; // first session expires → room again
+  assert.equal((await upload(request.agent(app), main)).status, 201);
+});
+
+test('kept out of search engines', async () => {
+  const { app } = setup();
+  const page = await request(app).get('/');
+  assert.equal(page.headers['x-robots-tag'], 'noindex, nofollow');
+  assert.match(page.text, /<meta name="robots" content="noindex, nofollow">/);
+  assert.equal((await request(app).get('/robots.txt')).text, 'User-agent: *\nDisallow: /\n');
+});

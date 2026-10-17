@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import helmet from 'helmet';
 import multer from 'multer';
+import { rateLimit } from 'express-rate-limit';
 import { parseRoster } from '../src/core/index.js';
 import { searchOnDuty, SearchError } from '../src/core/search.js';
 import { isIsoDate, todayIso } from '../src/core/dates.js';
@@ -12,9 +13,17 @@ const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..',
 const COOKIE = 'roster_sid';
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
-export function createApp({ store, secureCookies = false, today = () => todayIso(), log = console }) {
+const DEFAULT_LIMITS = { uploadsPer10Min: 20, apiPerMinute: 300 };
+
+export function createApp({ store, secureCookies = false, today = () => todayIso(), log = console, limits = DEFAULT_LIMITS }) {
   const app = express();
   app.disable('x-powered-by');
+  // Private tool: keep it out of search engines.
+  app.use((req, res, next) => {
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+    next();
+  });
+  app.get('/robots.txt', (req, res) => res.type('text/plain').send('User-agent: *\nDisallow: /\n'));
   app.use(helmet({ contentSecurityPolicy: { directives: { 'script-src': ["'self'"], 'img-src': ["'self'", 'data:'] } } }));
   app.use(express.json({ limit: '10kb' }));
   app.use(express.static(PUBLIC_DIR, { index: 'index.html' }));
@@ -22,6 +31,11 @@ export function createApp({ store, secureCookies = false, today = () => todayIso
   for (const file of ['dates.js', 'filters.js', 'week.js', 'shifts.js']) {
     app.get(`/core/${file}`, (req, res) => res.type('text/javascript').sendFile(path.join(PUBLIC_DIR, '..', 'src', 'core', file)));
   }
+
+  // Per-IP rate limits (behind a proxy, `trust proxy` is set in index.js so req.ip is the client).
+  const tooMany = (message) => ({ error: 'rate', message });
+  app.use('/api', rateLimit({ windowMs: 60 * 1000, limit: limits.apiPerMinute, standardHeaders: 'draft-7', legacyHeaders: false, message: tooMany('יותר מדי בקשות. נסו שוב בעוד דקה.') }));
+  const uploadLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: limits.uploadsPer10Min, standardHeaders: 'draft-7', legacyHeaders: false, message: tooMany('יותר מדי העלאות. נסו שוב בעוד כמה דקות.') });
 
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 5 } });
 
@@ -45,7 +59,7 @@ export function createApp({ store, secureCookies = false, today = () => todayIso
 
   app.get('/api/health', (req, res) => res.json({ ok: true }));
 
-  app.post('/api/roster', (req, res, next) => {
+  app.post('/api/roster', uploadLimiter, (req, res, next) => {
     upload.single('file')(req, res, async (err) => {
       if (err) {
         const message = err.code === 'LIMIT_FILE_SIZE' ? 'הקובץ גדול מ־5MB.' : 'העלאת הקובץ נכשלה.';
@@ -68,6 +82,7 @@ export function createApp({ store, secureCookies = false, today = () => todayIso
       let session = store.get(token);
       if (!session) {
         token = store.create();
+        if (!token) return res.status(503).json({ error: 'busy', message: 'השרת עמוס כרגע. נסו שוב בעוד כמה דקות.' });
         session = store.get(token);
       }
       // Replace everything from any previous upload — no stale posts or assignments survive.

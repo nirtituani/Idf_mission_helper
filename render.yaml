@@ -1,0 +1,19 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: idf-mission-helper
+    runtime: node
+    plan: free            # sleeps after ~15 min idle (in-memory rosters are cleared). "starter" = always on.
+    region: frankfurt     # closest Render region to Israel
+    branch: main
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true      # every push to main redeploys
+    envVars:
+      - key: NODE_ENV
+        value: production # Secure cookies + trust the load balancer's client IP
+      - key: NODE_VERSION
+        value: "22"
+      - key: MAX_SESSIONS
+        value: "40"

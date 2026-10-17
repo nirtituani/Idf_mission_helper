@@ -6,13 +6,13 @@ Upload an Excel duty roster, see exactly what was parsed (and what wasn't), and 
 **Status:** working and tested — upload → parse → validate → date/hour/post search, the
 by-soldier view with personal message previews (copy only), the weekly duty board, and a flexible
 shift search (any combination of day / hour / job / soldier).
-Not built yet: phone contacts, WhatsApp sending, deployment.
+Not built yet: phone contacts, WhatsApp sending.
 
 ## Run
 
 ```bash
 npm install
-npm test        # 103 tests: parsing, validation, searches, identity, messages, weekly board, sessions/privacy, UI
+npm test        # 107 tests: parsing, validation, searches, identity, messages, weekly board, sessions/privacy, UI
 npm start       # http://localhost:3000
 ```
 
@@ -107,6 +107,22 @@ shown on screen. Warnings and notes are kept in the data, not displayed; overlap
 - A new upload replaces the previous roster entirely; searches carry a roster version, stale ones get 409.
 - Logs never include file contents, names or request bodies.
 - All workbook text is rendered with `textContent` (no HTML injection from cells); strict CSP.
+
+## Deployment (Render)
+
+`render.yaml` is a Render Blueprint: Node web service, Frankfurt, `npm ci --omit=dev`, `npm start`,
+health check `/api/health`, auto-deploy on every push to `main`, `NODE_ENV=production` (Secure cookies,
+trusts one proxy hop for the client IP). On Render: **New → Blueprint → pick this repo → Apply**.
+
+The free plan sleeps after ~15 minutes without traffic; because rosters live only in memory, a sleeping
+server forgets uploads (upload again) and the first visit takes ~1 minute to wake. The `starter` plan is
+always on — needed once WhatsApp webhooks are connected.
+
+Public-internet protections: per-IP rate limits (300 API requests/min, 20 uploads/10 min), a cap on
+simultaneous sessions (`MAX_SESSIONS`, default 40 — new visitors get "busy" rather than exhausting memory),
+`noindex` headers + `robots.txt`, strict CSP, no third-party requests (fonts are self-hosted).
+Known audit note: `exceljs` depends on `uuid@8`, flagged for `v3/v5/v6` with a caller buffer; exceljs only
+calls `uuid.v4()`, so the advisory does not apply.
 
 ## Layout
 
