@@ -62,3 +62,12 @@ export function buildWaMessage(soldier, assignments, weekStart, { overlapIds = n
     sendable: problems.length === 0,
   };
 }
+
+// For a parsed roster: soldier → buildWaMessage result for the roster's selected week, with the
+// roster's double bookings (OVERLAP issues) as warnings.
+export function rosterMessageBuilder(roster) {
+  const byId = new Map(roster.assignments.map((a) => [a.id, a]));
+  const overlapIds = new Set(roster.issues.filter((i) => i.code === 'OVERLAP').flatMap((i) => i.assignmentIds));
+  const weekStart = roster.weekStart?.date ?? null;
+  return (soldier) => buildWaMessage(soldier, soldier.assignmentIds.map((id) => byId.get(id)), weekStart, { overlapIds });
+}

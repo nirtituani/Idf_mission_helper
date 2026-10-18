@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
 import { parseRoster } from '../src/core/index.js';
-import { buildMessage, DEFAULT_TEMPLATE } from '../src/core/messages.js';
+import { rosterMessageBuilder } from '../src/core/wa-message.js';
 import { buildMainFixture } from './fixtures/build.js';
 
 const html = fs.readFileSync(path.join(import.meta.dirname, '..', 'public', 'index.html'), 'utf8');
@@ -13,17 +13,18 @@ const dom = new JSDOM(html.replace(/<script[^>]*><\/script>/, ''), { url: 'http:
 Object.assign(globalThis, { window: dom.window, document: dom.window.document, FormData: dom.window.FormData });
 const roster = await parseRoster(await buildMainFixture(), { fileName: 'a.xlsx', today: '2026-10-17' });
 const byId = new Map(roster.assignments.map((a) => [a.id, a]));
+const buildMsg = rosterMessageBuilder(roster);
 const previewCalls = [];
 globalThis.fetch = async (url, opts = {}) => {
   const json = (status, body) => ({ ok: status < 400, status, json: async () => body });
   if (url === '/api/roster') return json(200, roster);
-  if (url === '/api/messages/template') return json(200, { template: DEFAULT_TEMPLATE, defaults: DEFAULT_TEMPLATE });
   if (url === '/api/messages/preview') {
     const { personKeys } = JSON.parse(opts.body);
     previewCalls.push(personKeys);
     const messages = personKeys.map((k) => {
       const s = roster.soldiers.find((x) => x.key === k);
-      return { key: k, name: s.name, ...buildMessage(s, s.assignmentIds.map((id) => byId.get(id))) };
+      const { text, problems, warnings, sendable } = buildMsg(s);
+      return { key: k, name: s.name, text, problems, warnings, sendable };
     });
     return json(200, { messages });
   }
@@ -87,6 +88,12 @@ test('expanding a soldier shows their assignments with source cells and the mess
   for (const c of cells) assert.ok(detail.textContent.includes(c), c);
   assert.match(detail.querySelector('.message-text').textContent, /^שלום גדי דמה,/);
   assert.match(detail.textContent, /חופפים/); // his overlap warning
+  assert.match(detail.querySelector('.message').textContent, /⚠ שיבוץ כפול/); // preview warning chip
+});
+
+test('the old editable message wording is gone', () => {
+  assert.equal($('template-form'), null);
+  assert.equal(document.querySelector('.template-box'), null);
 });
 
 test('problems box: overlaps are listed, notes/merges are not', () => {

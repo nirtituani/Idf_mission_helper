@@ -156,7 +156,7 @@ test('security headers are set', async () => {
   assert.equal(res.headers['x-powered-by'], undefined);
 });
 
-test('message preview: per-session, version-checked, uses saved template', async () => {
+test('message preview: per-session, version-checked, the exact WhatsApp template message', async () => {
   const { app } = setup();
   const a = request.agent(app);
   const b = request.agent(app);
@@ -166,24 +166,31 @@ test('message preview: per-session, version-checked, uses saved template', async
 
   const res = await a.post('/api/messages/preview').send(body);
   assert.equal(res.status, 200);
-  assert.match(res.body.messages[0].text, /^שלום גדי דמה,/);
+  const [msg] = res.body.messages;
+  assert.equal(msg.name, 'גדי דמה');
+  assert.match(msg.text, /^שלום גדי דמה,\nאלה השיבוצים שלך לפי קובץ השיבוץ לשבוע 11\/10 עד 18\/10:\n/);
+  assert.match(msg.text, /\nשני 12\/10: 06:00 עד 14:00 · סיור \/ מפקד – סיור • 08:00 עד 12:00 · סטטיות \/ ש״ג\n/);
+  assert.deepEqual(msg.problems, []);
+  assert.equal(msg.warnings.length, 1); // his double booking
+  assert.equal(msg.sendable, true);
+  assert.equal(msg.params, undefined);
   assert.equal((await b.post('/api/messages/preview').send(body)).status, 404);
   assert.equal((await a.post('/api/messages/preview').send({ ...body, rosterVersion: 'old' })).status, 409);
   assert.equal((await a.post('/api/messages/preview').send({ ...body, personKeys: ['לא קיים'] })).status, 400);
   assert.equal((await a.post('/api/messages/preview').send({ ...body, personKeys: [] })).status, 400);
+  // the old editable-template endpoints are gone
+  assert.equal((await a.get('/api/messages/template')).status, 404);
+});
 
-  assert.equal((await a.put('/api/messages/template').send({ template: { greeting: 'א'.repeat(400) } })).status, 400);
-  const saved = await a.put('/api/messages/template').send({ template: { greeting: 'היי {שם}', intro: '', closing: 'תודה' } });
-  assert.equal(saved.status, 200);
-  const again = await a.post('/api/messages/preview').send(body);
-  assert.match(again.body.messages[0].text, /^היי גדי דמה\n•/);
-
-  // Template survives a new upload in the same session; reset returns defaults.
-  const up2 = await upload(a, main);
-  assert.equal((await a.get('/api/messages/template')).body.template.greeting, 'היי {שם}');
-  const reset = await a.put('/api/messages/template').send({ template: null });
-  assert.equal(reset.body.template.greeting, 'שלום {שם},');
-  assert.ok(up2.body.soldiers.length > 0);
+test('message preview follows the week-start override', async () => {
+  const { app } = setup();
+  const a = request.agent(app);
+  await upload(a, main);
+  const roster = (await a.put('/api/roster/week-start').send({ date: '2026-10-04' })).body;
+  const key = roster.soldiers.find((s) => s.name === 'גדי דמה').key;
+  const [msg] = (await a.post('/api/messages/preview').send({ personKeys: [key], rosterVersion: roster.version })).body.messages;
+  assert.match(msg.text, /לשבוע 04\/10 עד 11\/10:/);
+  assert.match(msg.text, /\nשני 05\/10: 06:00 עד 14:00/); // day-name shifts move with the week
 });
 
 test('uploads are rate-limited per client', async () => {

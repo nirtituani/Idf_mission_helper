@@ -5,7 +5,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
 import { parseRoster } from '../src/core/index.js';
-import { DEFAULT_TEMPLATE } from '../src/core/messages.js';
 import { buildMainFixture } from './fixtures/build.js';
 
 const html = fs.readFileSync(path.join(import.meta.dirname, '..', 'public', 'index.html'), 'utf8');
@@ -16,7 +15,6 @@ const roster = await parseRoster(await buildMainFixture(), { fileName: 'a.xlsx',
 globalThis.fetch = async (url) => {
   const json = (status, body) => ({ ok: status < 400, status, json: async () => body });
   if (url === '/api/roster') return json(200, roster);
-  if (url === '/api/messages/template') return json(200, { template: DEFAULT_TEMPLATE, defaults: DEFAULT_TEMPLATE });
   if (url === '/api/messages/preview') return json(200, { messages: [] });
   throw new Error(`unexpected ${url}`);
 };

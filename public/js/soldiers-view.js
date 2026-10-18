@@ -1,5 +1,5 @@
 // "לפי חייל" view: search, select, inspect a soldier's assignments, preview personal messages.
-// Message text always comes from the server (same generator that will send it later).
+// Message text always comes from the server: the exact WhatsApp template message that will be sent.
 import { assignmentTable, copyText, el } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -28,7 +28,7 @@ export function createSoldiersView({ api, onStale }) {
 
   function messageBlock(msg) {
     const box = el('div', { class: 'message' });
-    for (const p of msg.problems) box.append(el('p', { class: 'inline-issue inline-warning' }, `⚠ ${p}`));
+    for (const p of [...msg.problems, ...(msg.warnings ?? [])]) box.append(el('p', { class: 'inline-issue inline-warning' }, `⚠ ${p}`));
     box.append(el('pre', { class: 'message-text', dir: 'rtl' }, msg.text));
     const copy = el('button', { type: 'button', class: 'btn' }, 'העתקת ההודעה');
     copy.addEventListener('click', async () => {
@@ -128,7 +128,7 @@ export function createSoldiersView({ api, onStale }) {
         const all = messages.map((m) => `===== ${m.name} =====\n${m.text}`).join('\n\n');
         copyAll.textContent = (await copyText(all)) ? 'הועתק ✓' : 'ההעתקה נכשלה';
       });
-      const withProblems = messages.filter((m) => m.problems.length).length;
+      const withProblems = messages.filter((m) => m.problems.length || m.warnings?.length).length;
       host.replaceChildren(
         el('h3', {}, `תצוגה מקדימה: ${messages.length} הודעות`),
         el('p', { class: withProblems ? 'status status-warn' : 'status status-ok' }, withProblems ? `${withProblems} הודעות דורשות בדיקה (מסומנות ב־⚠).` : 'כל ההודעות נוצרו מהשיבוצים שבקובץ.'),
@@ -139,36 +139,6 @@ export function createSoldiersView({ api, onStale }) {
       host.replaceChildren(el('p', { class: 'status status-error' }, e.message));
     }
   });
-
-  // ---- Template ----
-  const fields = ['greeting', 'intro', 'closing'];
-  async function loadTemplate() {
-    try {
-      const { template } = await api('GET', '/api/messages/template');
-      for (const f of fields) $(`tpl-${f}`).value = template[f];
-    } catch {
-      /* no roster yet */
-    }
-  }
-  async function saveTemplate(template) {
-    const status = $('tpl-status');
-    try {
-      const res = await api('PUT', '/api/messages/template', { template });
-      for (const f of fields) $(`tpl-${f}`).value = res.template[f];
-      status.className = 'status status-ok';
-      status.textContent = 'הנוסח נשמר. ההודעות יוצגו בנוסח החדש.';
-      $('bulk-preview').replaceChildren();
-      renderList();
-    } catch (e) {
-      status.className = 'status status-error';
-      status.textContent = e.message;
-    }
-  }
-  $('template-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    saveTemplate(Object.fromEntries(fields.map((f) => [f, $(`tpl-${f}`).value])));
-  });
-  $('tpl-reset').addEventListener('click', () => saveTemplate(null));
 
   return {
     // Show one soldier: filter to them and expand their details.
@@ -202,7 +172,6 @@ export function createSoldiersView({ api, onStale }) {
       $('soldiers-body').hidden = false;
       $('soldiers-empty').hidden = true;
       renderList();
-      loadTemplate();
     },
   };
 }
