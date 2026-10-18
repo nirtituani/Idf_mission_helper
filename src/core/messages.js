@@ -38,12 +38,17 @@ export function timeLabel(a) {
   return `${a.start.time} עד ${dayLabel(a.end.date)} ${a.end.time}`;
 }
 
-export function assignmentLine(a) {
+// Everything after the day label: night label (if any), time, place, shared-with.
+export function shiftText(a) {
   const place = [a.section, a.position].filter(Boolean).join(' / ');
   const shared = a.sharedWith?.length ? ` (יחד עם ${a.sharedWith.join(', ')})` : '';
   const night = nightBetween(a);
-  const when = night ? `בין יום ${night.fromDay} ${dm(night.fromDate)} ל${night.toDay} ${dm(night.toDate)}` : dayLabel(a.start.date);
-  return `• ${when} · ${timeLabel(a)} · ${place}${shared}`;
+  const nightLabel = night ? `בין יום ${night.fromDay} ${dm(night.fromDate)} ל${night.toDay} ${dm(night.toDate)} · ` : '';
+  return `${nightLabel}${timeLabel(a)} · ${place}${shared}`;
+}
+
+export function assignmentLine(a) {
+  return `• ${nightBetween(a) ? '' : `${dayLabel(a.start.date)} · `}${shiftText(a)}`;
 }
 
 // soldier: from groupBySoldier; assignments: that soldier's assignments (any order).
