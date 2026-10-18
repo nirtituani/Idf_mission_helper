@@ -68,6 +68,8 @@
 }
 
 * { box-sizing: border-box; }
+/* `hidden` must win over any display rule (e.g. .search-grid is display:grid). */
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
@@ -319,6 +321,7 @@ ul.plain { margin: 4px 0; padding-inline-start: 20px; }
 .soldier-name::before { content: "◂"; display: inline-block; width: 1.1em; color: var(--muted); transition: transform .15s; }
 .soldier-name[aria-expanded="true"]::before { transform: rotate(-90deg); color: var(--signal); }
 .soldier-detail { padding: 0 8px 18px; }
+.row-check { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; margin: -6px -8px; cursor: pointer; }
 .badge { font-size: .74rem; font-weight: 600; padding: 1px 8px; border-radius: 999px; }
 .badge-warn { background: var(--warn-bg); color: var(--warn); }
 .message { border: 1px solid var(--line); border-inline-start: 4px solid var(--olive); border-radius: 4px; padding: 12px 14px; display: grid; gap: 10px; justify-items: start; background: var(--sheet-2); }
@@ -380,7 +383,30 @@ button.entry:hover { transform: translateY(-1px); box-shadow: 0 4px 10px -6px rg
   .stamp { transform: none; width: 100%; }
   .card { padding: 16px; }
   .card h2 { font-size: 1.75rem; }
-  .tabs [role="tab"] { font-size: 1.2rem; padding: 8px 12px 6px; }
   .week-nav h3 { order: -1; flex-basis: 100%; margin: 0 0 4px; }
   .week-jump { margin-inline-start: 0; }
+
+  /* Tabs: all four visible as a 2×2 grid instead of a row that runs off the screen */
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; border-bottom: 0; margin-bottom: 0; overflow: visible; }
+  .tabs [role="tab"] {
+    font-size: 1.2rem; white-space: normal; text-align: center; min-height: 48px; padding: 10px 6px 8px;
+    border: 1px solid var(--line-strong); border-radius: 6px; background: var(--sheet-2);
+  }
+  .tabs [role="tab"][aria-selected="true"] { margin-bottom: 0; padding-bottom: 8px; border-color: var(--ink); }
+  .tabs [role="tab"][aria-selected="true"]::before { inset-inline: -1px; }
+  [role="tabpanel"] { border-top: 1px solid var(--line); border-radius: var(--radius); }
+
+  /* Comfortable tap targets (≥44px) */
+  .btn, select, input:not([type="checkbox"]):not([type="file"]), .dp-field, .dp-today, .dp-close, .dp-nav { min-height: 44px; }
+  .dp-nav { min-width: 44px; }
+  .dp-day { width: 38px; height: 40px; }
+  .check { min-height: 44px; padding-bottom: 0; }
+  .template-box summary { padding: 10px 0; }
+  .soldier-name { min-height: 44px; }
+  .soldier-row { padding: 2px 4px; }
+
+  /* Weekly board: narrower post column so more days fit on screen */
+  .board-corner, .board-pos { width: 86px; }
+  .board-pos { font-size: .78rem; }
+  table.board { min-width: 840px; }
 }

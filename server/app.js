@@ -24,7 +24,15 @@ export function createApp({ store, secureCookies = false, today = () => todayIso
     next();
   });
   app.get('/robots.txt', (req, res) => res.type('text/plain').send('User-agent: *\nDisallow: /\n'));
-  app.use(helmet({ contentSecurityPolicy: { directives: { 'script-src': ["'self'"], 'img-src': ["'self'", 'data:'] } } }));
+  // upgrade-insecure-requests only over HTTPS: on http://localhost Safari would upgrade the CSS/JS
+  // requests to https://localhost and load a blank, unstyled page.
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: { 'script-src': ["'self'"], 'img-src': ["'self'", 'data:'], 'upgrade-insecure-requests': secureCookies ? [] : null },
+      },
+    }),
+  );
   app.use(express.json({ limit: '10kb' }));
   app.use(express.static(PUBLIC_DIR, { index: 'index.html' }));
   // The browser shares these pure core modules (no Node APIs) — an explicit allowlist, not the folder.

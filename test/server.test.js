@@ -141,6 +141,13 @@ test('client bundle contains no server secrets or env access', () => {
   }
 });
 
+test('upgrade-insecure-requests only in production (Safari on http://localhost)', async () => {
+  const dev = createApp({ store: createSessionStore({ idleTtlMs: HOUR, maxAgeMs: HOUR }), log: quiet });
+  const prod = createApp({ store: createSessionStore({ idleTtlMs: HOUR, maxAgeMs: HOUR }), log: quiet, secureCookies: true });
+  assert.ok(!(await request(dev).get('/')).headers['content-security-policy'].includes('upgrade-insecure-requests'));
+  assert.ok((await request(prod).get('/')).headers['content-security-policy'].includes('upgrade-insecure-requests'));
+});
+
 test('security headers are set', async () => {
   const { app } = setup();
   const res = await request(app).get('/');

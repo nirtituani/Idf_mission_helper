@@ -90,7 +90,9 @@ export function createSoldiersView({ api, onStale }) {
         if (warnCount) meta.push(el('span', { class: 'badge badge-warn' }, `⚠ ${warnCount}`));
         if (s.ambiguous) meta.push(el('span', { class: 'badge badge-warn' }, 'יותר משם אחד בתא'));
         if (s.unresolvedCount) meta.push(el('span', { class: 'badge badge-warn' }, `${s.unresolvedCount} ללא זמן`));
-        return el('li', { class: 'soldier' }, el('div', { class: 'soldier-row' }, checkbox, nameBtn, ...meta), detail);
+        // The label gives the small checkbox a finger-sized tap area.
+        const pick = el('label', { class: 'row-check' }, checkbox);
+        return el('li', { class: 'soldier' }, el('div', { class: 'soldier-row' }, pick, nameBtn, ...meta), detail);
       }),
     );
     if (!shown.length) list.append(el('li', { class: 'muted' }, 'לא נמצאו חיילים התואמים לחיפוש.'));
