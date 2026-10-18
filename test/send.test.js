@@ -315,7 +315,7 @@ test('batch: client failure on the second soldier → accepted / failed / accept
   assert.equal(wa.calls.length, 3);
 });
 
-test('batch: a throwing repo for one soldier → that soldier failed, others proceed', async () => {
+test('batch: completeSend throws after a successful send → still accepted with a warning, others proceed', async () => {
   const wa = fakeWa();
   const repo = createMemoryRepo();
   const complete = repo.completeSend;
@@ -329,6 +329,26 @@ test('batch: a throwing repo for one soldier → that soldier failed, others pro
   const { agent, version } = await batchSession(app);
   const res = await agent.post('/api/send').send({ personKeys: batchKeys, rosterVersion: version, resend: false });
   assert.equal(res.status, 200);
+  assert.deepEqual(res.body.results.map((r) => r.status), ['accepted', 'accepted', 'accepted']);
+  assert.equal(res.body.results[0].reason, 'ההודעה נשלחה, אך שמירת הרישום נכשלה — אין לשלוח שוב');
+  assert.equal(res.body.results[1].reason, null);
+  assert.equal(wa.calls.length, 3);
+});
+
+test('batch: repo throws before the send (reserveSend) → failed, client not called for it, others proceed', async () => {
+  const wa = fakeWa();
+  const repo = createMemoryRepo();
+  const reserve = repo.reserveSend;
+  let thrown = false;
+  repo.reserveSend = async (a) => {
+    if (!thrown) { thrown = true; throw new Error('db down'); }
+    return reserve(a);
+  };
+  const store = createSessionStore({ idleTtlMs: 8 * HOUR, maxAgeMs: 24 * HOUR });
+  const app = createApp({ store, today: () => '2026-10-17', log: quiet, wa, repo, sendCode: CODE, testPhone: TEST_PHONE, sendEnabled: true, sendDelayMs: 0 });
+  const { agent, version } = await batchSession(app);
+  const res = await agent.post('/api/send').send({ personKeys: batchKeys, rosterVersion: version, resend: false });
   assert.deepEqual(res.body.results.map((r) => r.status), ['failed', 'accepted', 'accepted']);
   assert.equal(res.body.results[0].reason, 'שגיאת שרת — נסו שוב');
+  assert.equal(wa.calls.length, 2);
 });

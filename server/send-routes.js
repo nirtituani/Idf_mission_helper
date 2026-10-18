@@ -127,6 +127,7 @@ export function registerSendRoutes(app, { enabled, wa, repo, sendCode, testPhone
       const results = [];
       let sent = 0;
       for (const key of new Set(personKeys)) {
+        let accepted = false; // true once WhatsApp took the message
         try {
           const soldier = soldiers.get(key);
           const msg = build(soldier);
@@ -146,13 +147,16 @@ export function registerSendRoutes(app, { enabled, wa, repo, sendCode, testPhone
           }
           if (sent++ > 0) await wait(sendDelayMs);
           const r = await wa.sendTemplate(contact.phone, msg.params);
+          accepted = r.ok;
           await repo.completeSend({ weekStart, soldierKey: key, wamid: r.ok ? r.wamid : null, status: r.ok ? 'accepted' : 'failed', error: r.ok ? null : r.error });
           results.push({ key, status: r.ok ? 'accepted' : 'failed', reason: r.ok ? null : r.error });
         } catch (e) {
           // A DB/repo error for one soldier must not abort the batch. If it happened after the send,
           // the row stays "sending" (blocks duplicates; a resend may take it over after 5 minutes).
           log.error('send failed for one soldier:', e.message);
-          results.push({ key, status: 'failed', reason: 'שגיאת שרת — נסו שוב' });
+          results.push(accepted
+            ? { key, status: 'accepted', reason: 'ההודעה נשלחה, אך שמירת הרישום נכשלה — אין לשלוח שוב' }
+            : { key, status: 'failed', reason: 'שגיאת שרת — נסו שוב' });
         }
       }
       res.json({ results });

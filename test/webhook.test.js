@@ -6,6 +6,7 @@ import request from 'supertest';
 import { createApp } from '../server/app.js';
 import { createSessionStore } from '../server/sessions.js';
 import { createMemoryRepo } from '../server/repo.js';
+import { buildMainFixture } from './fixtures/build.js';
 
 const SECRET = 'סוד-דמה-app';
 const VERIFY = 'verify-demo-token';
@@ -91,10 +92,29 @@ test('malformed JSON with a valid signature → 200, warning logged without the 
   assert.ok(warnings.every((w) => !w.includes('secret-ish')));
 });
 
-test('a repo error on one status does not break the response', async () => {
-  const repo = { ...createMemoryRepo(), applyStatus: async () => { throw new Error('db down'); } };
-  const { app } = setup({ repo });
-  assert.equal((await post(app, payload([status('wamid.demo1', 'read')]))).status, 200);
+test('a repo error on one status → 500 (Meta retries), the other statuses still applied', async () => {
+  const mem = createMemoryRepo();
+  const repo = { ...mem, applyStatus: async (a) => { if (a.wamid === 'wamid.bad') throw new Error('db down'); return mem.applyStatus(a); } };
+  const ctx = setup({ repo });
+  const base = { weekStart: W, soldierKey: 'k1', soldierName: 'חייל דמה', paramsHash: 'h' };
+  await repo.reserveSend({ ...base, resend: false });
+  await repo.completeSend({ ...base, wamid: 'wamid.demo1', status: 'accepted' });
+  const res = await post(ctx.app, payload([status('wamid.bad', 'read'), status('wamid.demo1', 'delivered')]));
+  assert.equal(res.status, 500);
+  assert.equal((await repo.listSends(W)).get('k1').status, 'delivered');
+});
+
+test('unknown wamid → 200', async () => {
+  const { app } = setup();
+  assert.equal((await post(app, payload([status('wamid.unknown', 'read')]))).status, 200);
+});
+
+test('non-numeric timestamp falls back to now', async () => {
+  const { app, get } = await seeded();
+  assert.equal((await post(app, payload([status('wamid.demo1', 'read', { timestamp: 'abc' })]))).status, 200);
+  const rec = await get();
+  assert.equal(rec.status, 'read');
+  assert.ok(Number.isFinite(rec.statusAt.getTime()) && rec.statusAt.getTime() > 1700000000e3);
 });
 
 test('webhook not configured → 503 on GET and POST', async () => {
@@ -105,8 +125,18 @@ test('webhook not configured → 503 on GET and POST', async () => {
   assert.equal((await request(half.app).get('/webhooks/whatsapp')).status, 503);
 });
 
-test('webhook needs no roster session or access code; JSON API still parses normally', async () => {
-  const { app } = setup();
-  assert.equal((await post(app, payload([]))).status, 200);
-  assert.equal((await request(app).post('/api/search').send({})).status, 404); // json parser still active elsewhere
+test('webhook configured: JSON API routes still parse their bodies (/api/auth, /api/search)', async () => {
+  const store = createSessionStore({ idleTtlMs: 3600e3, maxAgeMs: 3600e3 });
+  const repo = createMemoryRepo();
+  const wa = { async sendTemplate() { return { ok: true, wamid: 'x' }; }, async templateStatus() { return 'APPROVED'; } };
+  const app = createApp({ store, today: () => '2026-10-17', log: quiet, repo, wa, sendCode: 'קוד-דמה', sendEnabled: true, webhook: { appSecret: SECRET, verifyToken: VERIFY } });
+  const agent = request.agent(app);
+  const up = await agent.post('/api/roster').attach('file', await buildMainFixture(), 'f.xlsx');
+  assert.equal(up.status, 201);
+  assert.equal((await agent.post('/api/auth').send({ code: 'קוד-דמה' })).status, 204);
+  assert.equal((await agent.post('/api/auth').send({ code: 'שגוי' })).status, 401);
+  const q = await agent.post('/api/search').send({ rosterVersion: 'old-version' });
+  assert.equal(q.status, 409); // body was read (a Buffer body would give a different answer)
+  assert.equal(q.body.error, 'stale');
+  assert.equal((await post(app, payload([]))).status, 200); // webhook itself needs no session or code
 });

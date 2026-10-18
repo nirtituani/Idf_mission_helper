@@ -16,8 +16,6 @@ function validSignature(appSecret, header, raw) {
 
 export function webhookRouter({ repo, appSecret, verifyToken, log = console }) {
   const router = express.Router();
-  router.use(express.raw({ type: 'application/json', limit: '1mb' }));
-
   router.get(WEBHOOK_PATH, (req, res) => {
     const { 'hub.mode': mode, 'hub.verify_token': token, 'hub.challenge': challenge } = req.query;
     if (mode === 'subscribe' && typeof token === 'string' && token === verifyToken && challenge !== undefined) {
@@ -26,7 +24,7 @@ export function webhookRouter({ repo, appSecret, verifyToken, log = console }) {
     res.status(403).end();
   });
 
-  router.post(WEBHOOK_PATH, async (req, res) => {
+  router.post(WEBHOOK_PATH, express.raw({ type: 'application/json', limit: '1mb' }), async (req, res) => {
     if (!validSignature(appSecret, req.get('X-Hub-Signature-256'), req.body)) return res.status(401).end();
     let data;
     try {
@@ -36,6 +34,7 @@ export function webhookRouter({ repo, appSecret, verifyToken, log = console }) {
       return res.status(200).end();
     }
     const entries = Array.isArray(data?.entry) ? data.entry : [];
+    let failed = false;
     for (const entry of entries) {
       for (const change of Array.isArray(entry?.changes) ? entry.changes : []) {
         const statuses = change?.value?.statuses;
@@ -46,15 +45,17 @@ export function webhookRouter({ repo, appSecret, verifyToken, log = console }) {
               wamid: s?.id,
               status: s?.status,
               error: s?.errors?.[0] ? describeError(s.errors[0].code) : null,
-              at: new Date(Number(s?.timestamp) * 1000),
+              at: Number.isFinite(Number(s?.timestamp)) ? new Date(Number(s.timestamp) * 1000) : new Date(),
             });
           } catch (e) {
+            failed = true;
             log.error('webhook: status update failed:', e.message);
           }
         }
       }
     }
-    res.status(200).end();
+    // 500 makes Meta retry; applyStatus is idempotent.
+    res.status(failed ? 500 : 200).end();
   });
 
   return router;
