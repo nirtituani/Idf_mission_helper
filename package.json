@@ -6,7 +6,8 @@
   "scripts": {
     "test": "node --import ./test/hooks.js --test test/*.test.js",
     "start": "node server/index.js",
-    "migrate": "node scripts/migrate.js"
+    "migrate": "node scripts/migrate.js",
+    "wa:setup": "node scripts/wa-setup.js"
   },
   "keywords": [],
   "author": "",
