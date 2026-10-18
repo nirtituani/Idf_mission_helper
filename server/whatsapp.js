@@ -2,6 +2,7 @@
 const GRAPH = 'https://graph.facebook.com/v25.0';
 const TIMEOUT_MS = 15000;
 const CACHE_MS = 5 * 60 * 1000;
+const ERROR_CACHE_MS = 30 * 1000;
 const RETRY_CODES = new Set([130429, 131048, 80007]);
 
 export function describeError(code) {
@@ -14,12 +15,14 @@ export function describeError(code) {
 }
 
 export function createWhatsAppClient({
-  token, phoneNumberId, wabaId, templateName, templateLang,
+  token, phoneNumberId, wabaId, templatePrefix, templateLang,
   fetch = globalThis.fetch,
   sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
   now = Date.now,
 }) {
   const headers = { Authorization: `Bearer ${token}` };
+  // params = [name, range, ...one line per duty day] → the template approved for that many days
+  const templateFor = (dayCount) => `${templatePrefix}${dayCount}`;
 
   async function attempt(params, to) {
     let res;
@@ -30,7 +33,7 @@ export function createWhatsAppClient({
         body: JSON.stringify({
           messaging_product: 'whatsapp', to, type: 'template',
           template: {
-            name: templateName, language: { code: templateLang },
+            name: templateFor(params.length - 2), language: { code: templateLang },
             components: [{ type: 'body', parameters: params.map((text) => ({ type: 'text', text })) }],
           },
         }),
@@ -64,21 +67,32 @@ export function createWhatsAppClient({
     }
   }
 
-  let cache = null; // { status, at }
-  async function templateStatus() {
-    if (cache && now() - cache.at < CACHE_MS) return cache.status;
-    try {
-      const url = `${GRAPH}/${wabaId}/message_templates?name=${encodeURIComponent(templateName)}&fields=name,status,language`;
-      const res = await fetch(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
-      if (!res.ok) return 'ERROR';
-      const body = await res.json();
-      const entry = (body?.data || []).find((t) => t.language === templateLang);
-      const status = entry?.status && typeof entry.status === 'string' ? entry.status : 'MISSING';
-      cache = { status, at: now() };
-      return status;
-    } catch {
-      return 'ERROR';
-    }
+  // Every template in the account, one request per 5 minutes. Concurrent callers share the
+  // in-flight request; a failed lookup is remembered briefly so polling can't hammer Meta.
+  let cache = null; // { list: Promise<array|null>, at, ttl }
+  function templateList() {
+    if (cache && now() - cache.at < cache.ttl) return cache.list;
+    const entry = { at: now(), ttl: CACHE_MS };
+    entry.list = (async () => {
+      try {
+        const url = `${GRAPH}/${wabaId}/message_templates?fields=name,status,language&limit=200`;
+        const res = await fetch(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = await res.json();
+        return Array.isArray(body?.data) ? body.data : [];
+      } catch {
+        entry.ttl = ERROR_CACHE_MS;
+        return null;
+      }
+    })();
+    cache = entry;
+    return entry.list;
+  }
+  async function templateStatus(dayCount) {
+    const list = await templateList();
+    if (!list) return 'ERROR';
+    const entry = list.find((t) => t.name === templateFor(dayCount) && t.language === templateLang);
+    return entry?.status && typeof entry.status === 'string' ? entry.status : 'MISSING';
   }
 
   return { sendTemplate, templateStatus, describeError };

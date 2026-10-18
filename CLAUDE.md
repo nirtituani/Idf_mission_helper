@@ -54,15 +54,15 @@ user's machine.
   `<bdi dir="ltr">`.
 
 ## WhatsApp sending
-Meta WhatsApp Cloud API (Graph v25.0), approved template `duty_roster_week` (10 string params, no
-newlines/tabs). Contacts Excel (name + phone) → matched to soldiers; preview → confirm → send with
+Meta WhatsApp Cloud API (Graph v25.0), approved templates `duty_roster_days_1`…`_8`, one per number of duty
+days (params: name, week range, one `יום X DD/MM: …` line per day with a shift; no newlines/tabs). Contacts Excel (name + phone) → matched to soldiers; preview → confirm → send with
 per-soldier status, no duplicate sends, delivery status via webhook `/webhooks/whatsapp`.
 - Modules: `server/whatsapp.js` (Graph client), `server/send-routes.js` (`/api/send/*`, access code),
   `server/webhook.js` (signature check, status updates), `server/repo.js` + `server/migrations/`
   (Postgres; phones encrypted, `server/crypto.js`), `server/config.js` (env), `src/core/phones.js`.
 - Env (server only, never browser/repo): `WA_TOKEN`, `WA_PHONE_NUMBER_ID`, `WA_WABA_ID`, `WA_APP_SECRET`,
   `WA_VERIFY_TOKEN`, `DATABASE_URL`, `PHONE_ENC_KEY` (32 bytes base64), `SEND_CODE`; optional `WA_TEST_PHONE`,
-  `WA_TEMPLATE_NAME`, `WA_TEMPLATE_LANG`. Any required one missing → sending disabled, site unchanged.
+  `WA_TEMPLATE_PREFIX` (default `duty_roster_days_`), `WA_TEMPLATE_LANG`. Any required one missing → sending disabled, site unchanged.
 - Migrations: `DATABASE_URL=… npm run migrate` (once, and after any new file in `server/migrations/`).
   Postgres contract tests: `TEST_DATABASE_URL=… npm test` — they TRUNCATE tables, never on real data.
 - Local dev: `WA_FAKE=1 npm start` (ignored in production) — in-memory repo + fake client, code `1234`,

@@ -124,7 +124,7 @@ test('the right code → state refreshed, tools shown with contacts count and te
   assert.equal($('send-code').value, '');
   assert.match($('contacts-info').textContent, /^3 מספרים שמורים, עודכן /);
   assert.ok($('contacts-info').querySelector('bdi[dir="ltr"]'));
-  assert.match($('send-template').textContent, /אושרה/);
+  assert.match($('send-template').textContent, /אושרו ב־Meta/);
 });
 
 test('status chips per soldier from the send state', async () => {
@@ -178,6 +178,19 @@ test('template pending/rejected → send buttons disabled with the reason', asyn
   await load(stateFor());
   pick('זיו דמה');
   assert.equal($('send-selected').disabled, false);
+});
+
+test('some templates approved (PARTIAL) → sending allowed, with a note', async () => {
+  await load(stateFor({ template: 'PARTIAL' }));
+  pick('זיו דמה');
+  assert.equal($('send-selected').disabled, false);
+  assert.match($('send-template').textContent, /חלק מתבניות ההודעה עדיין ממתינות לאישור Meta/);
+});
+
+test('no sendable soldier (NONE) → no false "template missing" message', async () => {
+  await load(stateFor({ template: 'NONE' }));
+  assert.match($('send-template').textContent, /אין כרגע חיילים שניתן לשלוח אליהם/);
+  assert.doesNotMatch($('send-template').textContent, /לא נמצאה/);
 });
 
 test('test send from the soldier detail posts only that soldier', async () => {

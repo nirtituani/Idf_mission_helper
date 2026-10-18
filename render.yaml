@@ -37,7 +37,7 @@ services:
         sync: false
       - key: SEND_CODE
         sync: false
-      - key: WA_TEMPLATE_NAME
-        value: duty_roster_week
+      - key: WA_TEMPLATE_PREFIX
+        value: duty_roster_days_
       - key: WA_TEMPLATE_LANG
         value: he

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseRoster } from '../src/core/index.js';
-import { buildWaMessage, TEMPLATE_BODY } from '../src/core/wa-message.js';
+import { buildWaMessage, templateBody, MAX_DAYS } from '../src/core/wa-message.js';
 import { buildMainFixture } from './fixtures/build.js';
 
 const roster = await parseRoster(await buildMainFixture(), { fileName: 'f.xlsx', today: '2026-10-17' });
@@ -18,42 +18,54 @@ const shift = (date, h, id) => ({
 });
 const fake = (assignments, extra = {}) => buildWaMessage({ name: 'חייל דמה', ambiguous: false, ...extra }, assignments, WEEK);
 
-test('name and range params', () => {
+test('name and range params, then one line per day that has a shift', () => {
   const m = build('גדי דמה');
-  assert.equal(m.params.length, 10);
   assert.equal(m.params[0], 'גדי דמה');
   assert.equal(m.params[1], '11/10 עד 18/10');
-  m.params.slice(2).forEach((p, i) => assert.ok(p.startsWith(`${11 + i}/10: `), p));
+  assert.equal(m.dayCount, m.params.length - 2);
+  assert.ok(m.dayCount >= 1 && m.dayCount <= MAX_DAYS);
+  for (const p of m.params.slice(2)) assert.match(p, /^יום (ראשון|שני|שלישי|רביעי|חמישי|שישי|שבת) \d\d\/\d\d: /);
 });
 
-test('empty day is exactly "DD/MM: —"', () => {
-  const m = build('גדי דמה');
-  assert.equal(m.params[2], '11/10: —');
-  assert.equal(m.params[9], '18/10: —');
+test('days without a shift are left out', () => {
+  const m = fake([shift('2026-10-12', '08', 'a'), shift('2026-10-14', '10', 'b')]);
+  assert.equal(m.dayCount, 2);
+  assert.deepEqual(m.params.slice(2).map((p) => p.split(':')[0]), ['יום שני 12/10', 'יום רביעי 14/10']);
+  assert.ok(!m.params.some((p) => p.includes('—')));
+});
+
+test('the second Sunday is named with its date', () => {
+  const m = fake([shift('2026-10-11', '08', 'a'), shift('2026-10-18', '08', 'b')]);
+  assert.deepEqual(m.params.slice(2).map((p) => p.split(':')[0]), ['יום ראשון 11/10', 'יום ראשון 18/10']);
 });
 
 test('two shifts on one day are joined by " • " in start order', () => {
   const m = build('גדי דמה');
-  assert.equal(m.params[3], '12/10: 06:00 עד 14:00 · סיור / מפקד – סיור • 08:00 עד 12:00 · סטטיות / ש״ג');
+  assert.ok(m.params.includes('יום שני 12/10: 06:00 עד 14:00 · סיור / מפקד – סיור • 08:00 עד 12:00 · סטטיות / ש״ג'), m.params.join('|'));
   assert.equal(m.sendable, true);
 });
 
 test('night shift keeps its night label inside the start day line', () => {
   const m = build('לוטם דמה');
-  assert.match(m.params.join('\n'), /בין יום ראשון 11\/10 לשני 12\/10 · 00:00 עד 04:00/);
-  assert.match(m.params[3], /^12\/10: בין יום ראשון/);
+  assert.ok(m.params.some((p) => /^יום שני 12\/10: בין יום ראשון 11\/10 לשני 12\/10 · 00:00 עד 04:00/.test(p)), m.params.join('|'));
 });
 
-test('params are template-safe and text has 11 body lines + blank + footer', () => {
+test('params are template-safe and text = body lines for the day count + blank + footer', () => {
   for (const s of roster.soldiers) {
     const m = buildWaMessage(s, asg(s), WEEK);
     for (const p of m.params) assert.ok(!/[\n\t]/.test(p) && !/ {4,}/.test(p), p);
   }
-  const lines = build('גדי דמה').text.split('\n');
-  assert.equal(lines.length, 13);
-  assert.equal(lines[11], '');
-  assert.equal(lines[12], 'הודעה אוטומטית ממערכת השיבוץ');
-  assert.ok(TEMPLATE_BODY.includes('{{10}}'));
+  const m = build('גדי דמה');
+  const lines = m.text.split('\n');
+  assert.equal(lines.length, m.dayCount + 3 + 2);
+  assert.equal(lines.at(-2), '');
+  assert.equal(lines.at(-1), 'הודעה אוטומטית ממערכת השיבוץ');
+  assert.ok(lines.slice(2, 2 + m.dayCount).every((l) => l.startsWith('• יום ')));
+});
+
+test('templateBody(k) has k bullet lines with params {{3}}..{{k+2}}', () => {
+  assert.equal(templateBody(1), 'שלום {{1}},\nאלה השיבוצים שלך לפי קובץ השיבוץ לשבוע {{2}}:\n• {{3}}\nאם יש טעות בשיבוץ, פנו למפקד. בהצלחה!');
+  assert.ok(templateBody(8).includes('• {{10}}') && !templateBody(8).includes('{{11}}'));
 });
 
 test('blocked cases', () => {

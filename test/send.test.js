@@ -33,8 +33,10 @@ function fakeWa({ status = 'APPROVED', fail = false } = {}) {
       await new Promise((r) => setImmediate(r));
       return fail ? { ok: false, error: 'שגיאת Meta (קוד 1)' } : { ok: true, wamid: `wamid.test${wa.calls.length}` };
     },
-    async templateStatus() {
-      return wa.status;
+    statusCalls: [],
+    async templateStatus(dayCount) {
+      wa.statusCalls.push(dayCount);
+      return typeof wa.status === 'function' ? wa.status(dayCount) : wa.status;
     },
   };
   return wa;
@@ -75,7 +77,7 @@ test('loadConfig: all vars present → enabled; any missing → disabled with na
   const ok = loadConfig(env);
   assert.equal(ok.enabled, true);
   assert.deepEqual(ok.missing, []);
-  assert.equal(ok.wa.templateName, 'duty_roster_week');
+  assert.equal(ok.wa.templatePrefix, 'duty_roster_days_');
   assert.equal(ok.wa.templateLang, 'he');
   assert.equal(ok.testPhone, '972500000099');
   const off = loadConfig({ ...env, SEND_CODE: '', WA_TOKEN: undefined });
@@ -214,7 +216,7 @@ test('two concurrent sends for the same soldier → client called once', async (
   assert.deepEqual([a.body.results[0].status, b.body.results[0].status].sort(), ['accepted', 'skipped']);
 });
 
-test('stale rosterVersion → 409, client not called; template PENDING → 409', async () => {
+test('stale rosterVersion → 409, client not called; template PENDING → skipped with reason', async () => {
   const wa = fakeWa({ status: 'PENDING' });
   const { app } = setup({ wa });
   const { agent, version } = await session(app);
@@ -223,10 +225,60 @@ test('stale rosterVersion → 409, client not called; template PENDING → 409',
   assert.equal(stale.status, 409);
   assert.equal(stale.body.error, 'stale');
   const pending = await agent.post('/api/send').send({ personKeys: [key], rosterVersion: version, resend: false });
-  assert.equal(pending.status, 409);
-  assert.equal(pending.body.error, 'template');
-  assert.equal((await agent.post('/api/send/test').send({ personKey: key, rosterVersion: version })).status, 409);
+  assert.equal(pending.status, 200);
+  assert.equal(pending.body.results[0].status, 'skipped');
+  assert.match(pending.body.results[0].reason, /תבנית ההודעה ל־\d+ ימים ממתינה לאישור Meta/);
+  const test = await agent.post('/api/send/test').send({ personKey: key, rosterVersion: version });
+  assert.equal(test.body.status, 'skipped');
   assert.equal(wa.calls.length, 0);
+  const state = await agent.get(`/api/send/state?rosterVersion=${version}`);
+  assert.equal(state.body.template, 'PENDING');
+  assert.equal(state.body.soldiers.find((x) => x.key === key).sendable, false);
+});
+
+test('templates are checked per day count: some approved → PARTIAL, only those soldiers are sendable', async () => {
+  const wa = fakeWa();
+  const { app } = setup({ wa });
+  const { agent, version } = await session(app);
+  await agent.get(`/api/send/state?rosterVersion=${version}`);
+  const counts = [...new Set(wa.statusCalls)].sort();
+  assert.ok(counts.length >= 2, `fixture needs soldiers with different day counts: ${counts}`);
+  const approved = counts[0];
+  wa.status = (k) => (k === approved ? 'APPROVED' : 'PENDING');
+  const state = (await agent.get(`/api/send/state?rosterVersion=${version}`)).body;
+  assert.equal(state.template, 'PARTIAL');
+  assert.ok(state.soldiers.some((x) => x.sendable));
+  assert.ok(state.soldiers.some((x) => !x.sendable && /ממתינה לאישור Meta/.test(x.problems[0])));
+});
+
+test('one batch with approved and pending templates: sends the approved, skips the pending', async () => {
+  const wa = fakeWa();
+  const { app, repo } = setup({ wa });
+  const { agent, version } = await session(app);
+  await agent.get(`/api/send/state?rosterVersion=${version}`);
+  const approved = Math.min(...wa.statusCalls);
+  wa.status = (k) => (k === approved ? 'APPROVED' : 'PENDING');
+  const state = (await agent.get(`/api/send/state?rosterVersion=${version}`)).body;
+  const ok = state.soldiers.find((x) => x.sendable);
+  const pending = state.soldiers.find((x) => !x.sendable && /ממתינה לאישור Meta/.test(x.problems[0]));
+  await repo.replaceContacts(roster.soldiers.filter((s) => [ok.key, pending.key].includes(s.key)).map((s, i) => ({ name: s.name, phone: `97250000009${i}` })));
+  const res = await agent.post('/api/send').send({ personKeys: [ok.key, pending.key], rosterVersion: version, resend: false });
+  const byKey = Object.fromEntries(res.body.results.map((r) => [r.key, r]));
+  assert.equal(byKey[ok.key].status, 'accepted');
+  assert.equal(byKey[pending.key].status, 'skipped');
+  assert.match(byKey[pending.key].reason, /ממתינה לאישור Meta/);
+  assert.equal(wa.calls.length, 1);
+  assert.equal(wa.calls[0].params.length - 2, approved);
+});
+
+test('no sendable soldier → template status NONE, not MISSING', async () => {
+  const wa = fakeWa();
+  const { app } = setup({ wa });
+  const { agent } = await session(app);
+  const moved = await agent.put('/api/roster/week-start').send({ date: '2026-10-12' }); // a Monday → every message blocked
+  const state = (await agent.get(`/api/send/state?rosterVersion=${moved.body.version}`)).body;
+  assert.ok(state.soldiers.every((x) => !x.sendable));
+  assert.equal(state.template, 'NONE');
 });
 
 test('bad bodies → 400', async () => {

@@ -23,7 +23,7 @@ export function loadConfig(env) {
       token: value(env, 'WA_TOKEN'),
       phoneNumberId: value(env, 'WA_PHONE_NUMBER_ID'),
       wabaId: value(env, 'WA_WABA_ID'),
-      templateName: value(env, 'WA_TEMPLATE_NAME') || 'duty_roster_week',
+      templatePrefix: value(env, 'WA_TEMPLATE_PREFIX') || 'duty_roster_days_',
       templateLang: value(env, 'WA_TEMPLATE_LANG') || 'he',
     },
     appSecret: value(env, 'WA_APP_SECRET'),

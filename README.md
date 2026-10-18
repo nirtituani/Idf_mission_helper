@@ -134,7 +134,7 @@ always on (optional, not required): on the free plan Meta retries webhook delive
    node -e "console.log(crypto.randomBytes(32).toString('base64'))"
    ```
    את התוצאה שמים ב-`PHONE_ENC_KEY`. חשוב לגבות אותו — בלעדיו אי אפשר לפענח את המספרים השמורים.
-4. **משתני סביבה ב-Render** (Environment): `WA_TOKEN`, `WA_PHONE_NUMBER_ID`, `WA_WABA_ID`, `WA_APP_SECRET`, `WA_VERIFY_TOKEN`, `DATABASE_URL`, `PHONE_ENC_KEY`, `SEND_CODE`, ואופציונלי `WA_TEST_PHONE` (מספר לשליחת בדיקה). `WA_TEMPLATE_NAME` (`duty_roster_week`) ו-`WA_TEMPLATE_LANG` (`he`) כבר מוגדרים ב-`render.yaml`.
+4. **משתני סביבה ב-Render** (Environment): `WA_TOKEN`, `WA_PHONE_NUMBER_ID`, `WA_WABA_ID`, `WA_APP_SECRET`, `WA_VERIFY_TOKEN`, `DATABASE_URL`, `PHONE_ENC_KEY`, `SEND_CODE`, ואופציונלי `WA_TEST_PHONE` (מספר לשליחת בדיקה). `WA_TEMPLATE_PREFIX` (`duty_roster_days_` — תבנית לכל מספר ימי שיבוץ, 1 עד 8) ו-`WA_TEMPLATE_LANG` (`he`) כבר מוגדרים ב-`render.yaml`.
    - `WA_APP_SECRET`: בדשבורד של אפליקציית Meta → App settings → Basic → App secret.
    - `WA_VERIFY_TOKEN`: מחרוזת אקראית כלשהי שבוחרים בעצמם — מגדירים את אותה מחרוזת גם ב-Render וגם ב-Meta.
    - `SEND_CODE`: קוד גישה שמקלידים באתר לפני שליחה. מומלץ לפחות 10 תווים אקראיים (האתר ציבורי; הקוד הוא ההגנה היחידה על השליחה).

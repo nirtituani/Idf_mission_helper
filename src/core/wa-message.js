@@ -1,21 +1,20 @@
-// Parameters for the approved WhatsApp template, built from one soldier's parsed week.
+// Parameters for the approved WhatsApp templates, built from one soldier's parsed week.
+// One template per number of duty days (1–8): only days with a shift get a line.
 import { createHash } from 'node:crypto';
-import { addDays, weekdayOf } from './dates.js';
+import { HEBREW_DAYS, addDays, weekdayOf } from './dates.js';
 import { shiftText } from './messages.js';
 
-export const TEMPLATE_BODY = [
-  'שלום {{1}},',
-  'אלה השיבוצים שלך לפי קובץ השיבוץ לשבוע {{2}}:',
-  'ראשון {{3}}',
-  'שני {{4}}',
-  'שלישי {{5}}',
-  'רביעי {{6}}',
-  'חמישי {{7}}',
-  'שישי {{8}}',
-  'שבת {{9}}',
-  'ראשון {{10}}',
-  'אם יש טעות בשיבוץ, פנו למפקד. בהצלחה!',
-].join('\n');
+export const MAX_DAYS = 8; // a roster week runs Sunday to the next Sunday
+
+// Body of the approved template for k duty days (must match what was submitted to Meta).
+export function templateBody(k) {
+  return [
+    'שלום {{1}},',
+    'אלה השיבוצים שלך לפי קובץ השיבוץ לשבוע {{2}}:',
+    ...Array.from({ length: k }, (_, i) => `• {{${i + 3}}}`),
+    'אם יש טעות בשיבוץ, פנו למפקד. בהצלחה!',
+  ].join('\n');
+}
 
 export const FOOTER = 'הודעה אוטומטית ממערכת השיבוץ';
 export const MAX_BODY = 1024;
@@ -40,22 +39,24 @@ export function buildWaMessage(soldier, assignments, weekStart, { overlapIds = n
   }
   if (timed.some((a) => overlapIds.has(a.id))) warnings.push('שיבוץ כפול: יש שיבוצים חופפים בזמן.');
 
-  const dayParams = days.map((d) => {
-    const shifts = timed.filter((a) => a.start.date === d).map(shiftText);
-    return `${dm(d)}: ${shifts.length ? shifts.join(' • ') : '—'}`;
-  });
-  while (dayParams.length < 8) dayParams.push('—');
+  const dayParams = days
+    .map((d) => ({ d, shifts: timed.filter((a) => a.start.date === d).map(shiftText) }))
+    .filter(({ shifts }) => shifts.length)
+    .map(({ d, shifts }) => `יום ${HEBREW_DAYS[weekdayOf(d)]} ${dm(d)}: ${shifts.join(' • ')}`);
+  const dayCount = dayParams.length;
   const params = [
     soldier.name,
-    weekStart ? `${dm(days[0])} עד ${dm(days[7])}` : '—',
+    weekStart ? `${dm(days[0])} עד ${dm(days[MAX_DAYS - 1])}` : '—',
     ...dayParams,
   ].map(clean);
 
-  const body = params.reduce((t, p, i) => t.replaceAll(`{{${i + 1}}}`, () => p), TEMPLATE_BODY);
+  // single pass, so a "{{N}}" inside a param is never substituted again
+  const body = templateBody(dayCount).replace(/\{\{(\d+)\}\}/g, (m, n) => params[n - 1] ?? m);
   if (body.length > MAX_BODY) problems.push(`ההודעה ארוכה מדי (${body.length} תווים, המקסימום ${MAX_BODY}).`);
 
   return {
     params,
+    dayCount,
     text: `${body}\n\n${FOOTER}`,
     problems,
     warnings,
