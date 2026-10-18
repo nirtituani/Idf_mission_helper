@@ -7,15 +7,21 @@ import { rateLimit } from 'express-rate-limit';
 import { parseRoster } from '../src/core/index.js';
 import { searchOnDuty, SearchError } from '../src/core/search.js';
 import { isIsoDate, todayIso } from '../src/core/dates.js';
-import { DEFAULT_TEMPLATE, TemplateError, buildMessage, validateTemplate } from '../src/core/messages.js';
+import { rosterMessageBuilder } from '../src/core/wa-message.js';
+import { registerSendRoutes } from './send-routes.js';
+import { webhookRouter, disabledWebhookRouter } from './webhook.js';
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const COOKIE = 'roster_sid';
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
-const DEFAULT_LIMITS = { uploadsPer10Min: 20, apiPerMinute: 300 };
+const DEFAULT_LIMITS = { uploadsPer10Min: 20, apiPerMinute: 300, authPer15Min: 10 };
 
-export function createApp({ store, secureCookies = false, today = () => todayIso(), log = console, limits = DEFAULT_LIMITS }) {
+// wa/repo/sendCode/testPhone: WhatsApp sending (see send-routes.js); webhook: { appSecret, verifyToken }; sendEnabled defaults to "all given".
+export function createApp({
+  store, secureCookies = false, today = () => todayIso(), log = console, limits = DEFAULT_LIMITS,
+  wa = null, repo = null, webhook = null, sendCode = null, testPhone = null, sendEnabled = Boolean(wa && repo && sendCode), sendDelayMs = 150,
+}) {
   const app = express();
   app.disable('x-powered-by');
   // Private tool: keep it out of search engines.
@@ -23,7 +29,7 @@ export function createApp({ store, secureCookies = false, today = () => todayIso
     res.setHeader('X-Robots-Tag', 'noindex, nofollow');
     next();
   });
-  app.get('/robots.txt', (req, res) => res.type('text/plain').send('User-agent: *\nDisallow: /\n'));
+  app.get('/robots.txt', (req, res) => res.type('text/plain').send('User-agent: *\nAllow: /privacy\nAllow: /privacy.html\nDisallow: /\n'));
   // upgrade-insecure-requests only over HTTPS: on http://localhost Safari would upgrade the CSS/JS
   // requests to https://localhost and load a blank, unstyled page.
   app.use(
@@ -33,8 +39,14 @@ export function createApp({ store, secureCookies = false, today = () => todayIso
       },
     }),
   );
+  // Meta's status webhook: before express.json (it needs the raw body for the signature check).
+  app.use(webhook?.appSecret && webhook?.verifyToken && repo
+    ? webhookRouter({ repo, appSecret: webhook.appSecret, verifyToken: webhook.verifyToken, log })
+    : disabledWebhookRouter());
   app.use(express.json({ limit: '10kb' }));
   app.use(express.static(PUBLIC_DIR, { index: 'index.html' }));
+  // Public privacy policy (its URL is entered in the Meta app settings).
+  app.get('/privacy', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'privacy.html')));
   // The browser shares these pure core modules (no Node APIs) — an explicit allowlist, not the folder.
   for (const file of ['dates.js', 'filters.js', 'week.js', 'shifts.js']) {
     app.get(`/core/${file}`, (req, res) => res.type('text/javascript').sendFile(path.join(PUBLIC_DIR, '..', 'src', 'core', file)));
@@ -67,18 +79,41 @@ export function createApp({ store, secureCookies = false, today = () => todayIso
 
   app.get('/api/health', (req, res) => res.json({ ok: true }));
 
-  app.post('/api/roster', uploadLimiter, (req, res, next) => {
-    upload.single('file')(req, res, async (err) => {
-      if (err) {
-        const message = err.code === 'LIMIT_FILE_SIZE' ? 'הקובץ גדול מ־5MB.' : 'העלאת הקובץ נכשלה.';
-        return res.status(400).json({ error: 'upload', message });
-      }
-      if (!req.file) return res.status(400).json({ error: 'upload', message: 'לא נבחר קובץ.' });
-      const fileName = decodeFileName(req.file.originalname);
-      const buf = req.file.buffer;
-      if (!/\.xlsx$/i.test(fileName) || buf.length < 4 || buf[0] !== 0x50 || buf[1] !== 0x4b) {
-        return res.status(400).json({ error: 'format', message: 'יש להעלות קובץ Excel בפורמט ‎.xlsx‎.' });
-      }
+  // Multipart "file" → { fileName, buffer } of an .xlsx, or null after answering 400.
+  const readXlsx = (req, res) =>
+    new Promise((resolve) => {
+      upload.single('file')(req, res, (err) => {
+        if (err) {
+          const message = err.code === 'LIMIT_FILE_SIZE' ? 'הקובץ גדול מ־5MB.' : 'העלאת הקובץ נכשלה.';
+          res.status(400).json({ error: 'upload', message });
+          return resolve(null);
+        }
+        if (!req.file) {
+          res.status(400).json({ error: 'upload', message: 'לא נבחר קובץ.' });
+          return resolve(null);
+        }
+        const fileName = decodeFileName(req.file.originalname);
+        const buffer = req.file.buffer;
+        if (!/\.xlsx$/i.test(fileName) || buffer.length < 4 || buffer[0] !== 0x50 || buffer[1] !== 0x4b) {
+          res.status(400).json({ error: 'format', message: 'יש להעלות קובץ Excel בפורמט ‎.xlsx‎.' });
+          return resolve(null);
+        }
+        resolve({ fileName, buffer });
+      });
+    });
+
+  // true when it answered 409 (the browser's roster is not the session's current one).
+  const checkVersion = (req, res, version) => {
+    if (version === req.session.data.roster.version) return false;
+    res.status(409).json({ error: 'stale', message: 'השיבוץ הוחלף מאז שהמסך נטען. יש לרענן את הנתונים.' });
+    return true;
+  };
+
+  app.post('/api/roster', uploadLimiter, async (req, res, next) => {
+    try {
+      const file = await readXlsx(req, res);
+      if (!file) return;
+      const { fileName, buffer: buf } = file;
       let roster;
       try {
         roster = await parseRoster(buf, { fileName, today: today() });
@@ -97,7 +132,9 @@ export function createApp({ store, secureCookies = false, today = () => todayIso
       session.data = { fileName, buffer: buf, roster };
       setCookie(res, token);
       res.status(201).json(roster);
-    });
+    } catch (e) {
+      next(e);
+    }
   });
 
   app.get('/api/roster', requireRoster, (req, res) => res.json(req.session.data.roster));
@@ -117,9 +154,7 @@ export function createApp({ store, secureCookies = false, today = () => todayIso
   app.post('/api/search', requireRoster, (req, res) => {
     const { date, hour, postId, rosterVersion } = req.body || {};
     const { roster } = req.session.data;
-    if (rosterVersion !== roster.version) {
-      return res.status(409).json({ error: 'stale', message: 'השיבוץ הוחלף מאז שהמסך נטען. יש לרענן את הנתונים.' });
-    }
+    if (checkVersion(req, res, rosterVersion)) return;
     try {
       res.json(searchOnDuty(roster, roster.options, { date, hour, postId }));
     } catch (e) {
@@ -128,48 +163,30 @@ export function createApp({ store, secureCookies = false, today = () => todayIso
     }
   });
 
-  // ---- Messages (preview only; sending is not implemented yet) ----
-  const templateOf = (session) => session.template || DEFAULT_TEMPLATE;
-
-  app.get('/api/messages/template', requireRoster, (req, res) => {
-    res.json({ template: templateOf(req.session), defaults: DEFAULT_TEMPLATE });
-  });
-
-  app.put('/api/messages/template', requireRoster, (req, res) => {
-    const { template } = req.body || {};
-    if (template === null) {
-      req.session.template = null;
-      return res.json({ template: DEFAULT_TEMPLATE, defaults: DEFAULT_TEMPLATE });
-    }
-    try {
-      req.session.template = validateTemplate(template);
-      res.json({ template: req.session.template, defaults: DEFAULT_TEMPLATE });
-    } catch (e) {
-      if (e instanceof TemplateError) return res.status(400).json({ error: 'template', message: e.message });
-      throw e;
-    }
-  });
-
+  // ---- Messages: preview of the exact WhatsApp template message for the roster's selected week ----
   app.post('/api/messages/preview', requireRoster, (req, res) => {
     const { personKeys, rosterVersion } = req.body || {};
     const { roster } = req.session.data;
-    if (rosterVersion !== roster.version) {
-      return res.status(409).json({ error: 'stale', message: 'השיבוץ הוחלף מאז שהמסך נטען. יש לרענן את הנתונים.' });
-    }
+    if (checkVersion(req, res, rosterVersion)) return;
     if (!Array.isArray(personKeys) || personKeys.length === 0 || personKeys.length > 1000) {
       return res.status(400).json({ error: 'query', message: 'לא נבחרו חיילים.' });
     }
     const soldiers = new Map(roster.soldiers.map((s) => [s.key, s]));
-    const byId = new Map(roster.assignments.map((a) => [a.id, a]));
-    const template = templateOf(req.session);
+    const build = rosterMessageBuilder(roster);
     const messages = [];
     for (const key of personKeys) {
       const soldier = soldiers.get(key);
       if (!soldier) return res.status(400).json({ error: 'query', message: 'חייל שנבחר אינו קיים בשיבוץ הנוכחי.' });
-      const msg = buildMessage(soldier, soldier.assignmentIds.map((id) => byId.get(id)), template);
-      messages.push({ key, name: soldier.name, ...msg });
+      const { text, problems, warnings, sendable } = build(soldier);
+      messages.push({ key, name: soldier.name, text, problems, warnings, sendable });
     }
     res.json({ messages });
+  });
+
+  registerSendRoutes(app, {
+    enabled: sendEnabled, wa, repo, sendCode, testPhone, sendDelayMs, log,
+    authLimit: limits.authPer15Min ?? DEFAULT_LIMITS.authPer15Min,
+    helpers: { requireRoster, checkVersion, readXlsx, uploadLimiter },
   });
 
   app.delete('/api/session', (req, res) => {

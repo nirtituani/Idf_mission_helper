@@ -153,3 +153,18 @@ export async function buildTwoWeekFixture() {
   });
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
+
+// FICTIONAL contacts workbook: header `שם | טלפון | הערה`; rows are [name, phone, note] arrays.
+// Options: titleRows (blank-ish rows above the header), columns (header order override).
+export async function buildContactsFixture(rows, { titleRows = 0, headers = ['שם', 'טלפון', 'הערה'] } = {}) {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('אנשי קשר');
+  for (let i = 1; i <= titleRows; i++) ws.getCell(i, 1).value = `כותרת דמה ${i}`;
+  headers.forEach((h, i) => (ws.getCell(titleRows + 1, i + 1).value = h));
+  rows.forEach((values, ri) => {
+    values.forEach((v, i) => {
+      if (v !== null && v !== undefined) ws.getCell(titleRows + 2 + ri, i + 1).value = v;
+    });
+  });
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}

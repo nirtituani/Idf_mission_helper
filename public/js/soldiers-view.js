@@ -1,17 +1,55 @@
-// "לפי חייל" view: search, select, inspect a soldier's assignments, preview personal messages.
-// Message text always comes from the server (same generator that will send it later).
+// "לפי חייל" view: search, select, inspect a soldier's assignments, preview personal messages and
+// (when the server has WhatsApp configured) send them. Message text always comes from the server:
+// the exact WhatsApp template message that will be sent.
 import { assignmentTable, copyText, el } from './ui.js';
+import { createSendPanel, sendChips } from './send-panel.js';
 
 const $ = (id) => document.getElementById(id);
 
-export function createSoldiersView({ api, onStale }) {
+export function createSoldiersView({ api, onStale, pollMs, now }) {
   let roster = null;
   let issuesByAssignment = new Map();
   let issuesById = new Map();
   const selected = new Set();
   const expanded = new Set();
+  let sendState = new Map(); // key → entry of GET /api/send/state, only while authorized
+  const rowParts = new Map(); // key → { checkbox, chips, send } of the rendered rows
 
-  const eligible = (s) => !s.ambiguous && s.timedCount > 0;
+  // With send state: only soldiers whose message can be sent to a matched number. Without it
+  // (sending off / no code yet): every soldier a message can be prepared for.
+  const eligible = (s) => {
+    const st = sendState.get(s.key);
+    return st ? st.sendable && st.contact === 'ok' : !s.ambiguous && s.timedCount > 0;
+  };
+  const selectedKeys = () => (roster ? roster.soldiers.filter((s) => selected.has(s.key)).map((s) => s.key) : []);
+
+  const panel = createSendPanel({
+    api,
+    pollMs,
+    now,
+    onStale,
+    getRoster: () => roster,
+    getSelected: selectedKeys,
+    onStateChange(state) {
+      sendState = new Map(state?.authorized ? state.soldiers.map((x) => [x.key, x]) : []);
+      if (!roster) return;
+      for (const s of roster.soldiers) if (!eligible(s)) selected.delete(s.key);
+      updateSendBits();
+      renderToolbar();
+    },
+  });
+
+  // Refresh chips, checkboxes and detail send controls in place (no re-render of open details).
+  function updateSendBits() {
+    for (const s of roster.soldiers) {
+      const parts = rowParts.get(s.key);
+      if (!parts) continue;
+      parts.checkbox.disabled = !eligible(s);
+      parts.checkbox.checked = selected.has(s.key);
+      parts.chips.replaceChildren(...sendChips(sendState.get(s.key)));
+      parts.send?.update();
+    }
+  }
   const visible = () => {
     const q = $('soldier-filter').value.trim();
     return roster.soldiers.filter((s) => !q || s.name.includes(q) || s.spellings.some((n) => n.includes(q)));
@@ -28,7 +66,7 @@ export function createSoldiersView({ api, onStale }) {
 
   function messageBlock(msg) {
     const box = el('div', { class: 'message' });
-    for (const p of msg.problems) box.append(el('p', { class: 'inline-issue inline-warning' }, `⚠ ${p}`));
+    for (const p of [...msg.problems, ...(msg.warnings ?? [])]) box.append(el('p', { class: 'inline-issue inline-warning' }, `⚠ ${p}`));
     box.append(el('pre', { class: 'message-text', dir: 'rtl' }, msg.text));
     const copy = el('button', { type: 'button', class: 'btn' }, 'העתקת ההודעה');
     copy.addEventListener('click', async () => {
@@ -51,6 +89,9 @@ export function createSoldiersView({ api, onStale }) {
     parts.push(el('h4', {}, 'הודעה אישית'));
     const msgHost = el('div', {}, el('p', { class: 'status status-loading' }, 'מכין הודעה…'));
     parts.push(msgHost);
+    const send = panel.detailControls(s.key);
+    if (rowParts.has(s.key)) rowParts.get(s.key).send = send;
+    parts.push(send.node);
     host.replaceChildren(...parts);
     try {
       const [msg] = await preview([s.key]);
@@ -63,6 +104,7 @@ export function createSoldiersView({ api, onStale }) {
   function renderList() {
     const list = $('soldier-list');
     const shown = visible();
+    rowParts.clear();
     list.replaceChildren(
       ...shown.map((s) => {
         const checkbox = el('input', { type: 'checkbox', 'aria-label': `בחירת ${s.name}` });
@@ -73,6 +115,8 @@ export function createSoldiersView({ api, onStale }) {
           else selected.delete(s.key);
           renderToolbar();
         });
+        const chips = el('span', { class: 'chips' }, ...sendChips(sendState.get(s.key)));
+        rowParts.set(s.key, { checkbox, chips, send: null });
         const detail = el('div', { class: 'soldier-detail' });
         detail.hidden = !expanded.has(s.key);
         const nameBtn = el('button', { type: 'button', class: 'soldier-name', 'aria-expanded': String(expanded.has(s.key)) }, s.name);
@@ -92,7 +136,7 @@ export function createSoldiersView({ api, onStale }) {
         if (s.unresolvedCount) meta.push(el('span', { class: 'badge badge-warn' }, `${s.unresolvedCount} ללא זמן`));
         // The label gives the small checkbox a finger-sized tap area.
         const pick = el('label', { class: 'row-check' }, checkbox);
-        return el('li', { class: 'soldier' }, el('div', { class: 'soldier-row' }, pick, nameBtn, ...meta), detail);
+        return el('li', { class: 'soldier' }, el('div', { class: 'soldier-row' }, pick, nameBtn, ...meta, chips), detail);
       }),
     );
     if (!shown.length) list.append(el('li', { class: 'muted' }, 'לא נמצאו חיילים התואמים לחיפוש.'));
@@ -104,8 +148,10 @@ export function createSoldiersView({ api, onStale }) {
     const all = $('select-all');
     all.checked = shownEligible.length > 0 && shownEligible.every((s) => selected.has(s.key));
     all.indeterminate = !all.checked && shownEligible.some((s) => selected.has(s.key));
-    $('selected-count').textContent = `נבחרו ${selected.size} מתוך ${roster.soldiers.filter(eligible).length} חיילים שניתן להכין להם הודעה`;
+    const what = sendState.size ? 'שניתן לשלוח להם' : 'שניתן להכין להם הודעה';
+    $('selected-count').textContent = `נבחרו ${selected.size} מתוך ${roster.soldiers.filter(eligible).length} חיילים ${what}`;
     $('preview-selected').disabled = selected.size === 0;
+    panel.selectionChanged();
   }
 
   $('soldier-filter').addEventListener('input', () => roster && renderList());
@@ -128,7 +174,7 @@ export function createSoldiersView({ api, onStale }) {
         const all = messages.map((m) => `===== ${m.name} =====\n${m.text}`).join('\n\n');
         copyAll.textContent = (await copyText(all)) ? 'הועתק ✓' : 'ההעתקה נכשלה';
       });
-      const withProblems = messages.filter((m) => m.problems.length).length;
+      const withProblems = messages.filter((m) => m.problems.length || m.warnings?.length).length;
       host.replaceChildren(
         el('h3', {}, `תצוגה מקדימה: ${messages.length} הודעות`),
         el('p', { class: withProblems ? 'status status-warn' : 'status status-ok' }, withProblems ? `${withProblems} הודעות דורשות בדיקה (מסומנות ב־⚠).` : 'כל ההודעות נוצרו מהשיבוצים שבקובץ.'),
@@ -139,36 +185,6 @@ export function createSoldiersView({ api, onStale }) {
       host.replaceChildren(el('p', { class: 'status status-error' }, e.message));
     }
   });
-
-  // ---- Template ----
-  const fields = ['greeting', 'intro', 'closing'];
-  async function loadTemplate() {
-    try {
-      const { template } = await api('GET', '/api/messages/template');
-      for (const f of fields) $(`tpl-${f}`).value = template[f];
-    } catch {
-      /* no roster yet */
-    }
-  }
-  async function saveTemplate(template) {
-    const status = $('tpl-status');
-    try {
-      const res = await api('PUT', '/api/messages/template', { template });
-      for (const f of fields) $(`tpl-${f}`).value = res.template[f];
-      status.className = 'status status-ok';
-      status.textContent = 'הנוסח נשמר. ההודעות יוצגו בנוסח החדש.';
-      $('bulk-preview').replaceChildren();
-      renderList();
-    } catch (e) {
-      status.className = 'status status-error';
-      status.textContent = e.message;
-    }
-  }
-  $('template-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    saveTemplate(Object.fromEntries(fields.map((f) => [f, $(`tpl-${f}`).value])));
-  });
-  $('tpl-reset').addEventListener('click', () => saveTemplate(null));
 
   return {
     // Show one soldier: filter to them and expand their details.
@@ -184,6 +200,8 @@ export function createSoldiersView({ api, onStale }) {
       roster = next;
       selected.clear();
       expanded.clear();
+      sendState = new Map();
+      panel.reset();
       $('bulk-preview').replaceChildren();
       $('soldier-filter').value = '';
       if (!roster) {
@@ -202,7 +220,6 @@ export function createSoldiersView({ api, onStale }) {
       $('soldiers-body').hidden = false;
       $('soldiers-empty').hidden = true;
       renderList();
-      loadTemplate();
     },
   };
 }

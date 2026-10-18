@@ -17,3 +17,27 @@ services:
         value: "22"
       - key: MAX_SESSIONS
         value: "40"
+      # WhatsApp sending — secrets are entered in the Render dashboard (never in the repo).
+      # Any missing one disables sending; the rest of the site works as before.
+      - key: WA_TOKEN
+        sync: false
+      - key: WA_PHONE_NUMBER_ID
+        sync: false
+      - key: WA_WABA_ID
+        sync: false
+      - key: WA_APP_SECRET
+        sync: false
+      - key: WA_VERIFY_TOKEN
+        sync: false
+      - key: WA_TEST_PHONE
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: PHONE_ENC_KEY
+        sync: false
+      - key: SEND_CODE
+        sync: false
+      - key: WA_TEMPLATE_NAME
+        value: duty_roster_week
+      - key: WA_TEMPLATE_LANG
+        value: he

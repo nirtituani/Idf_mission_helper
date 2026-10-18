@@ -6,13 +6,13 @@ Upload an Excel duty roster, see exactly what was parsed (and what wasn't), and 
 **Status:** working and tested — upload → parse → validate → date/hour/post search, the
 by-soldier view with personal message previews (copy only), the weekly duty board, and a flexible
 shift search (any combination of day / hour / job / soldier).
-Not built yet: phone contacts, WhatsApp sending.
+WhatsApp sending (contacts upload, template send, delivery status) is built; it stays disabled until configured — see the checklist under Deployment.
 
 ## Run
 
 ```bash
 npm install
-npm test        # 107 tests: parsing, validation, searches, identity, messages, weekly board, sessions/privacy, UI
+npm test        # parsing, validation, searches, identity, messages, weekly board, sessions/privacy, UI
 npm start       # http://localhost:3000
 ```
 
@@ -72,9 +72,9 @@ listed as an info note; results show the cell's own spelling too.
 One row per soldier (merged identity), searchable by any spelling. Expanding a soldier shows every assignment
 with its source cell, the soldier's warnings, and the personal message. Messages are generated on the server
 (`src/core/messages.js`) from that soldier's assignments only — the same text that will later be sent.
-Wording (opening / intro / closing, with `{שם}` and `{טווח}`) is editable per session. Time ranges use "עד"
+Time ranges use "עד"
 instead of a dash so they read correctly in RTL WhatsApp. Shared shifts say who they are shared with.
-WhatsApp sending is not connected; the UI says so and offers copy instead.
+The same text feeds the WhatsApp template when sending is configured; otherwise the UI offers copy.
 
 ## Weekly board
 
@@ -116,7 +116,38 @@ trusts one proxy hop for the client IP). On Render: **New → Blueprint → pick
 
 The free plan sleeps after ~15 minutes without traffic; because rosters live only in memory, a sleeping
 server forgets uploads (upload again) and the first visit takes ~1 minute to wake. The `starter` plan is
-always on — needed once WhatsApp webhooks are connected.
+always on (optional, not required): on the free plan Meta retries webhook delivery and the first request wakes the service. Changing the plan is the owner's decision.
+
+### WhatsApp sending — רשימת הקמה (חד־פעמי)
+
+השליחה כבויה עד שכל המשתנים מוגדרים; האתר עצמו ממשיך לעבוד כרגיל. כל הערכים כאן הם placeholders — הערכים האמיתיים נשמרים רק ב-Render ובמחשב שלך, לא ב-repo.
+
+1. **מסד נתונים (Neon):** ליצור פרויקט ב-Neon, אזור Frankfurt (AWS eu-central-1). להעתיק את מחרוזת החיבור עם `sslmode=verify-full` (מונע אזהרה של pg).
+2. **מיגרציה, פעם אחת, לפני השימוש הראשון:**
+   ```bash
+   DATABASE_URL='<neon url>' npm run migrate
+   ```
+   אופציונלי: להריץ פעם אחת את בדיקות החוזה מול Neon — `TEST_DATABASE_URL='<neon url>' npm test`.
+   זהירות: הבדיקות האלה עושות TRUNCATE לטבלאות. להריץ לפני העלאת אנשי קשר אמיתיים, או מול branch/מסד נפרד.
+3. **מפתח הצפנה לטלפונים:**
+   ```bash
+   node -e "console.log(crypto.randomBytes(32).toString('base64'))"
+   ```
+   את התוצאה שמים ב-`PHONE_ENC_KEY`. חשוב לגבות אותו — בלעדיו אי אפשר לפענח את המספרים השמורים.
+4. **משתני סביבה ב-Render** (Environment): `WA_TOKEN`, `WA_PHONE_NUMBER_ID`, `WA_WABA_ID`, `WA_APP_SECRET`, `WA_VERIFY_TOKEN`, `DATABASE_URL`, `PHONE_ENC_KEY`, `SEND_CODE`, ואופציונלי `WA_TEST_PHONE` (מספר לשליחת בדיקה). `WA_TEMPLATE_NAME` (`duty_roster_week`) ו-`WA_TEMPLATE_LANG` (`he`) כבר מוגדרים ב-`render.yaml`.
+   - `WA_APP_SECRET`: בדשבורד של אפליקציית Meta → App settings → Basic → App secret.
+   - `WA_VERIFY_TOKEN`: מחרוזת אקראית כלשהי שבוחרים בעצמם — מגדירים את אותה מחרוזת גם ב-Render וגם ב-Meta.
+   - `SEND_CODE`: קוד גישה שמקלידים באתר לפני שליחה. מומלץ לפחות 10 תווים אקראיים (האתר ציבורי; הקוד הוא ההגנה היחידה על השליחה).
+5. **הרצת סקריפט ההקמה** (מהמחשב המקומי, הטוקן לא מודפס):
+   ```bash
+   WA_TOKEN='<token>' WA_WABA_ID='<WABA ID>' WA_PHONE_NUMBER_ID='<phone number ID>' npm run wa:setup
+   ```
+   הסקריפט רושם את האפליקציה ל-webhooks של החשבון, ומדפיס את סטטוס התבנית (צריך `APPROVED`), סטטוס ואיכות המספר, ואת כתובת ה-webhook.
+6. **Meta → Webhooks:** Callback URL = `https://idf-mission-helper.onrender.com/webhooks/whatsapp`, Verify token = הערך של `WA_VERIFY_TOKEN`, ולהירשם לשדה `messages`.
+7. **פרסום האפליקציה:** ב-App settings → Basic להזין Privacy policy URL = `https://idf-mission-helper.onrender.com/privacy.html`, ואז להעביר את האפליקציה למצב Live — בלי זה Meta לא שולחת webhooks אמיתיים.
+8. **שליחת בדיקה** (למספר `WA_TEST_PHONE`) מהאתר, לוודא שההודעה והסטטוס מגיעים — ורק אחר כך שליחה אמיתית.
+
+ב-free plan השרת עלול להיות רדום: Meta שולחת webhooks שוב, והבקשה הראשונה מעירה את השירות. שינוי התוכנית הוא החלטה של הבעלים.
 
 Public-internet protections: per-IP rate limits (300 API requests/min, 20 uploads/10 min), a cap on
 simultaneous sessions (`MAX_SESSIONS`, default 40 — new visitors get "busy" rather than exhausting memory),
@@ -138,7 +169,10 @@ src/core/      pure business logic (no UI)
   shifts.js      flexible shift search (served to the browser)
   people.js      soldier identity (near-identical name merging)
   soldiers.js    roster grouped by soldier
-  messages.js    personal message text + template validation
+  messages.js    personal message text (shift wording)
+  wa-message.js  WhatsApp template parameters + sendability checks for one soldier
+  contacts.js    contacts Excel parsing + soldier ↔ contact matching
+  phones.js      phone normalization
   dates.js       date/time logic (also served to the browser)
   index.js       parseRoster(buffer) pipeline
 server/        Express app, in-memory sessions
