@@ -95,3 +95,9 @@ test('hash is stable and changes with the shifts', () => {
   const changed = [{ ...as[0], section: 'אחר' }, ...as.slice(1)];
   assert.notEqual(buildWaMessage(s, changed, WEEK).hash, buildWaMessage(s, as, WEEK).hash);
 });
+
+test('a week that does not start on Sunday is not sendable', () => {
+  const m = build('גדי דמה', '2026-10-12');
+  assert.equal(m.sendable, false);
+  assert.ok(m.problems.includes('תחילת השבוע אינה יום ראשון — לא ניתן לשלוח'));
+});

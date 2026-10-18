@@ -72,7 +72,7 @@ listed as an info note; results show the cell's own spelling too.
 One row per soldier (merged identity), searchable by any spelling. Expanding a soldier shows every assignment
 with its source cell, the soldier's warnings, and the personal message. Messages are generated on the server
 (`src/core/messages.js`) from that soldier's assignments only — the same text that will later be sent.
-Wording (opening / intro / closing, with `{שם}` and `{טווח}`) is editable per session. Time ranges use "עד"
+Time ranges use "עד"
 instead of a dash so they read correctly in RTL WhatsApp. Shared shifts say who they are shared with.
 The same text feeds the WhatsApp template when sending is configured; otherwise the UI offers copy.
 
@@ -137,7 +137,7 @@ always on (optional, not required): on the free plan Meta retries webhook delive
 4. **משתני סביבה ב-Render** (Environment): `WA_TOKEN`, `WA_PHONE_NUMBER_ID`, `WA_WABA_ID`, `WA_APP_SECRET`, `WA_VERIFY_TOKEN`, `DATABASE_URL`, `PHONE_ENC_KEY`, `SEND_CODE`, ואופציונלי `WA_TEST_PHONE` (מספר לשליחת בדיקה). `WA_TEMPLATE_NAME` (`duty_roster_week`) ו-`WA_TEMPLATE_LANG` (`he`) כבר מוגדרים ב-`render.yaml`.
    - `WA_APP_SECRET`: בדשבורד של אפליקציית Meta → App settings → Basic → App secret.
    - `WA_VERIFY_TOKEN`: מחרוזת אקראית כלשהי שבוחרים בעצמם — מגדירים את אותה מחרוזת גם ב-Render וגם ב-Meta.
-   - `SEND_CODE`: קוד גישה שמקלידים באתר לפני שליחה.
+   - `SEND_CODE`: קוד גישה שמקלידים באתר לפני שליחה. מומלץ לפחות 10 תווים אקראיים (האתר ציבורי; הקוד הוא ההגנה היחידה על השליחה).
 5. **הרצת סקריפט ההקמה** (מהמחשב המקומי, הטוקן לא מודפס):
    ```bash
    WA_TOKEN='<token>' WA_WABA_ID='<WABA ID>' WA_PHONE_NUMBER_ID='<phone number ID>' npm run wa:setup
@@ -169,7 +169,9 @@ src/core/      pure business logic (no UI)
   shifts.js      flexible shift search (served to the browser)
   people.js      soldier identity (near-identical name merging)
   soldiers.js    roster grouped by soldier
-  messages.js    personal message text + template validation
+  messages.js    personal message text (shift wording)
+  wa-message.js  WhatsApp template parameters + sendability checks for one soldier
+  contacts.js    contacts Excel parsing + soldier ↔ contact matching
   phones.js      phone normalization
   dates.js       date/time logic (also served to the browser)
   index.js       parseRoster(buffer) pipeline

@@ -36,8 +36,9 @@ export function createWhatsAppClient({
         }),
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
-    } catch {
-      return { ok: false, retry: true, error: 'שגיאת רשת בשליחה ל־Meta' };
+    } catch (e) {
+      // a timeout is not retried: Meta may already have accepted the message (a retry could duplicate it)
+      return { ok: false, retry: e?.name !== 'TimeoutError', error: 'שגיאת רשת בשליחה ל־Meta' };
     }
     let body = null;
     try { body = await res.json(); } catch { /* non-JSON body */ }

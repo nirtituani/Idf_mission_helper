@@ -231,5 +231,5 @@ test('kept out of search engines', async () => {
   const page = await request(app).get('/');
   assert.equal(page.headers['x-robots-tag'], 'noindex, nofollow');
   assert.match(page.text, /<meta name="robots" content="noindex, nofollow">/);
-  assert.equal((await request(app).get('/robots.txt')).text, 'User-agent: *\nDisallow: /\n');
+  assert.equal((await request(app).get('/robots.txt')).text, 'User-agent: *\nAllow: /privacy\nAllow: /privacy.html\nDisallow: /\n');
 });

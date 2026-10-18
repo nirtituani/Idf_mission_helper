@@ -29,7 +29,7 @@ export function createApp({
     res.setHeader('X-Robots-Tag', 'noindex, nofollow');
     next();
   });
-  app.get('/robots.txt', (req, res) => res.type('text/plain').send('User-agent: *\nDisallow: /\n'));
+  app.get('/robots.txt', (req, res) => res.type('text/plain').send('User-agent: *\nAllow: /privacy\nAllow: /privacy.html\nDisallow: /\n'));
   // upgrade-insecure-requests only over HTTPS: on http://localhost Safari would upgrade the CSS/JS
   // requests to https://localhost and load a blank, unstyled page.
   app.use(

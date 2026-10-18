@@ -62,14 +62,17 @@ function shouldApply(current, next) {
   return (RANK[current] ?? -1) < RANK[next];
 }
 
-export function createPgRepo({ databaseUrl, cipher }) {
+export function createPgRepo({ databaseUrl, cipher, log = console }) {
   const pool = new pg.Pool({ connectionString: databaseUrl, max: 3, ssl: { rejectUnauthorized: true } });
+  // an idle client dropped by the server emits 'error' on the pool; unhandled, it would crash the process
+  pool.on('error', e => log.error('db pool:', e.code || e.message));
   // dates come back as raw 'YYYY-MM-DD' strings (no timezone shift) for this pool only
   pool.on('connect', c => c.setTypeParser(1082, v => v));
   const SEL = `week_start, soldier_key, soldier_name, params_hash, wamid, status, error, sent_at, status_at`;
   const view = r => ({ status: r.status, error: r.error, paramsHash: r.params_hash, sentAt: r.sent_at, statusAt: r.status_at });
 
   return {
+    _pool: pool,
     async replaceContacts(list) {
       const c = await pool.connect();
       try {

@@ -1,6 +1,6 @@
 // Parameters for the approved WhatsApp template, built from one soldier's parsed week.
 import { createHash } from 'node:crypto';
-import { addDays } from './dates.js';
+import { addDays, weekdayOf } from './dates.js';
 import { shiftText } from './messages.js';
 
 export const TEMPLATE_BODY = [
@@ -32,6 +32,7 @@ export function buildWaMessage(soldier, assignments, weekStart, { overlapIds = n
   if (assignments.some((a) => a.kind !== 'timed')) problems.push('יש שיבוץ ללא תאריך ושעה מזוהים — לא ניתן לשלוח.');
   if (!timed.length) problems.push('אין שיבוצים עם זמן מזוהה — אין מה לשלוח.');
   if (!weekStart) problems.push('תחילת השבוע לא זוהתה בקובץ — לא ניתן לשלוח.');
+  else if (weekdayOf(weekStart) !== 0) problems.push('תחילת השבוע אינה יום ראשון — לא ניתן לשלוח');
 
   const days = weekStart ? Array.from({ length: 8 }, (_, i) => addDays(weekStart, i)) : [];
   if (weekStart && timed.some((a) => a.start.date < days[0] || a.start.date > days[7])) {

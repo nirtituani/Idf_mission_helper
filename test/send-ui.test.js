@@ -71,7 +71,8 @@ const { createSoldiersView } = await import('../public/js/soldiers-view.js');
 const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms));
 // Like the real app: onStale reloads the roster, which resets the view and the panel.
 let staleCalls = 0;
-const view = createSoldiersView({ api, onStale: async () => { staleCalls += 1; view.setRoster(roster); await tick(); }, pollMs: 40 });
+let nowMs = Date.parse('2026-10-18T09:10:00.000Z'); // 10 minutes after the fixtures' sentAt
+const view = createSoldiersView({ api, onStale: async () => { staleCalls += 1; view.setRoster(roster); await tick(); }, pollMs: 40, now: () => nowMs });
 const $ = (id) => document.getElementById(id);
 $('view-soldiers').hidden = false;
 const click = (n) => n.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
@@ -141,8 +142,10 @@ test('status chips per soldier from the send state', async () => {
   }));
   assert.deepEqual(chips('אבי דמה'), ['אין מספר']);
   assert.deepEqual(chips('אור דמה'), ['שם לא חד־משמעי']);
-  assert.deepEqual(chips('אורי דמה'), ['נשלח ✓']);
-  assert.deepEqual(chips('אלון דמה'), ['נשלח ✓']);
+  for (const n of ['אורי דמה', 'אלון דמה']) {
+    assert.match(chips(n)[0], /^נשלח ✓ \d\d\/\d\d \d\d:\d\d$/); // the sent time is visible, not only a tooltip
+    assert.equal(row(n).querySelector('.chip bdi[dir="ltr"]').textContent, chips(n)[0].slice('נשלח ✓ '.length));
+  }
   assert.deepEqual(chips('בני דמה'), ['נמסר ✓✓']);
   assert.deepEqual(chips('דני דמה'), ['נקרא ✓✓', 'השתנה מאז השליחה']);
   assert.ok(row('דני דמה').querySelector('.chip-read'));
@@ -293,6 +296,35 @@ test('contacts upload: count and row errors; a missing header shows no "שורה
   assert.match($('contacts-status').textContent, /לא נמצאה כותרת עם העמודות שם וטלפון/);
   assert.match($('contacts-status').textContent, /לא השתנתה/);
   assert.ok(!/שורה 0/.test($('contacts-status').textContent));
+});
+
+test('confirm counts soldiers still sending separately from those who already received', async () => {
+  const rec = (status) => ({ status, error: null, sentAt: '2026-10-18T09:00:00.000Z', changed: false });
+  await load(stateFor({ soldiers: { [keyOf('נוי דמה')]: { send: rec('delivered') }, [keyOf('עדי דמה')]: { send: rec('sending') } } }));
+  for (const n of ['נוי דמה', 'עדי דמה', 'פז דמה']) pick(n);
+  click($('send-selected'));
+  const text = $('send-confirm').textContent;
+  assert.match(text, /1 כבר קיבלו/);
+  assert.match(text, /1 בשליחה כרגע/);
+  assert.match(text, /לשלוח שוב גם למי שכבר קיבל ולמי שבשליחה כרגע/);
+  assert.match(text, /לשלוח הודעה ל־1 חיילים\?/);
+  click($('send-confirm-cancel'));
+});
+
+test('polling stops once the newest send is older than 30 minutes; an explicit refresh still works', async () => {
+  const pending = { [keyOf('תום דמה')]: { send: { status: 'accepted', error: null, sentAt: '2026-10-18T09:00:00.000Z', changed: false } } };
+  nowMs = Date.parse('2026-10-18T09:40:00.000Z'); // 40 minutes later
+  try {
+    await load(stateFor({ soldiers: pending }));
+    const n = callsTo('/api/send/state').length;
+    await tick(200);
+    assert.equal(callsTo('/api/send/state').length, n, 'no auto-polling for an old pending send');
+    view.setRoster(roster); // any explicit reload (new roster, after a send) still fetches the state
+    await tick();
+    assert.equal(callsTo('/api/send/state').length, n + 1, 'explicit refresh still loads the state');
+  } finally {
+    nowMs = Date.parse('2026-10-18T09:10:00.000Z');
+  }
 });
 
 test('state auto-refreshes while a send is not yet delivered/read/failed and the tab is visible', async () => {

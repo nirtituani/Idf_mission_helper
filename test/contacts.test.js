@@ -68,17 +68,17 @@ test('matchContacts: exact, spelling variant, short form, ambiguous', () => {
   const contacts = [
     { name: 'אבי דמה', phone: '972500000001' },
     { name: 'נווה דמה', phone: '972500000002' },
-    { name: 'אור כהן', phone: '972500000003' },
-    { name: 'דנה לוי', phone: '972500000004' },
-    { name: 'דנה לוי', phone: '972500000005' },
+    { name: 'אור כהן דמה', phone: '972500000003' },
+    { name: 'דנה לוי דמה', phone: '972500000004' },
+    { name: 'דנה לוי דמה', phone: '972500000005' },
   ];
   const m = matchContacts(
-    [sol('a', 'אבי דמה'), sol('n', 'נוה דמה'), sol('k', 'כהן'), sol('d', 'דנה לוי'), sol('z', 'זיו דמה')],
+    [sol('a', 'אבי דמה'), sol('n', 'נוה דמה'), sol('k', 'כהן דמה'), sol('d', 'דנה לוי דמה'), sol('z', 'זיו דמה')],
     contacts,
   );
   assert.deepEqual(m.get('a'), { status: 'ok', phone: '972500000001' });
   assert.deepEqual(m.get('n'), { status: 'ok', phone: '972500000002' });
-  assert.deepEqual(m.get('k'), { status: 'none' });
+  assert.deepEqual(m.get('k'), { status: 'none' }); // a short form is not the full contact name
   assert.deepEqual(m.get('d'), { status: 'ambiguous' });
   assert.deepEqual(m.get('z'), { status: 'none' });
 });
@@ -86,4 +86,25 @@ test('matchContacts: exact, spelling variant, short form, ambiguous', () => {
 test('matchContacts uses any spelling', () => {
   const m = matchContacts([sol('a', 'אבי דמה', ['אבי דמה', 'נווה דמה'])], [{ name: 'נווה דמה', phone: '972500000002' }]);
   assert.equal(m.get('a').status, 'ok');
+});
+
+test('matchContacts: a contact that is the only hit of two soldiers makes both ambiguous', () => {
+  const m = matchContacts(
+    [sol('a', 'נווה דמה'), sol('b', 'נוה דמה'), sol('c', 'גדי דמה')],
+    [{ name: 'נווה דמה', phone: '972500000001' }, { name: 'גדי דמה', phone: '972500000002' }],
+  );
+  assert.deepEqual(m.get('a'), { status: 'ambiguous' });
+  assert.deepEqual(m.get('b'), { status: 'ambiguous' });
+  assert.deepEqual(m.get('c'), { status: 'ok', phone: '972500000002' });
+});
+
+test('parseContactsWorkbook: valid phone with an empty name says the name is missing', async () => {
+  const buf = await buildContactsFixture([[null, '050-0000001'], ['אבי דמה', '050-0000002']]);
+  const { contacts, errors } = await parseContactsWorkbook(buf);
+  assert.equal(contacts.length, 1);
+  assert.deepEqual(errors, [{ row: 2, message: 'שורה 2: חסר שם' }]);
+});
+
+test('normalizePhone accepts a 00972 prefix', () => {
+  assert.equal(normalizePhone('00972-50-000-0001'), '972500000001');
 });

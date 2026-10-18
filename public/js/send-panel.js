@@ -26,7 +26,8 @@ export function templateBlock(template) {
 }
 
 const SEND_LABEL = { accepted: 'נשלח ✓', sent: 'נשלח ✓', delivered: 'נמסר ✓✓', read: 'נקרא ✓✓', sending: 'בשליחה…' };
-const chip = (text, kind, title) => el('span', { class: `chip chip-${kind}`, ...(title ? { title } : {}) }, text);
+const chip = (text, kind, title, ...extra) => el('span', { class: `chip chip-${kind}`, ...(title ? { title } : {}) }, text, ...extra);
+const POLL_MAX_AGE_MS = 30 * 60 * 1000; // stop auto-polling once the newest send is this old
 
 // Status chips for one soldier's entry in GET /api/send/state (null → no chips).
 export function sendChips(st) {
@@ -38,7 +39,13 @@ export function sendChips(st) {
   const rec = st.send;
   if (rec) {
     if (rec.status === 'failed') chips.push(chip(`נכשל: ${rec.error || 'סיבה לא ידועה'}`, 'err'));
-    else if (SEND_LABEL[rec.status]) chips.push(chip(SEND_LABEL[rec.status], rec.status === 'read' ? 'read' : rec.status === 'sending' ? 'muted' : 'ok', stamp(rec.sentAt)));
+    else if (SEND_LABEL[rec.status]) {
+      const kind = rec.status === 'read' ? 'read' : rec.status === 'sending' ? 'muted' : 'ok';
+      const at = stamp(rec.sentAt);
+      // accepted/sent: the send time is visible in the chip itself, not only in the tooltip
+      if (at && (rec.status === 'accepted' || rec.status === 'sent')) chips.push(chip(`${SEND_LABEL[rec.status]} `, kind, at, ltr(at)));
+      else chips.push(chip(SEND_LABEL[rec.status], kind, at));
+    }
     if (rec.changed) chips.push(chip('השתנה מאז השליחה', 'warn'));
   }
   return chips;
@@ -52,7 +59,7 @@ function setStatus(node, kind, ...content) {
 // getSelected() → selected soldier keys in roster order; onStateChange(state) after every refresh
 // (state: the /api/send/state response for the current roster, or null).
 export function createSendPanel({
-  api, getRoster, getSelected, onStateChange, onStale = async () => {}, pollMs = 20000,
+  api, getRoster, getSelected, onStateChange, onStale = async () => {}, pollMs = 20000, now = Date.now,
   isVisible = () => !$('view-soldiers').hidden && !document.hidden,
 }) {
   let state = null;
@@ -109,9 +116,12 @@ export function createSendPanel({
     }
   }
 
-  // Poll while any message is still on its way (not delivered/read/failed) and the tab is visible.
+  // Poll while any message is still on its way (not delivered/read/failed), the newest send is less
+  // than 30 minutes old (an old stuck one won't change; refresh() still works) and the tab is visible.
   function schedule() {
     if (!authorized() || !state.soldiers.some((s) => s.send && !FINAL.has(s.send.status))) return;
+    const newest = Math.max(...state.soldiers.filter((s) => s.send).map((s) => Date.parse(s.send.sentAt) || 0));
+    if (now() - newest > POLL_MAX_AGE_MS) return;
     const tick = () => {
       if (busy || !isVisible()) {
         timer = setTimeout(tick, pollMs);
@@ -218,11 +228,13 @@ export function createSendPanel({
     const keys = getSelected();
     const fresh = [];
     const already = [];
+    const sending = [];
     const failed = [];
     for (const k of keys) {
       const rec = entry(k)?.send;
       if (!rec) fresh.push(k);
       else if (rec.status === 'failed') failed.push(k);
+      else if (rec.status === 'sending') sending.push(k);
       else already.push(k);
     }
     const title = el('h4', { id: 'send-confirm-title' });
@@ -240,21 +252,24 @@ export function createSendPanel({
       const [y, m, d] = state.weekStart.split('-');
       parts.push(el('p', { class: 'muted small' }, 'הודעת השבוע שמתחיל ב־', ltr(`${d}/${m}/${y}`), ', כפי שמוצגת בתצוגה המקדימה של כל חייל.'));
     }
-    if (already.length || failed.length) {
+    if (already.length || sending.length || failed.length) {
       const facts = [];
       if (already.length) facts.push(`${already.length} כבר קיבלו את הודעת השבוע`);
+      if (sending.length) facts.push(`${sending.length} בשליחה כרגע`);
       if (failed.length) facts.push(`${failed.length} נכשלו בשליחה קודמת`);
       parts.push(
         el('p', { class: 'status status-warn' }, `מתוך הנבחרים: ${facts.join(', ')}. הם לא יקבלו הודעה אלא אם תסמנו את התיבה.`),
         el('ul', { class: 'plain small' },
-          ...already.map((k) => el('li', {}, `${nameOf(k)} — ${SEND_LABEL[entry(k).send.status] ?? 'נשלח'}`)),
+          ...[...already, ...sending].map((k) => el('li', {}, `${nameOf(k)} — ${SEND_LABEL[entry(k).send.status] ?? 'נשלח'}`)),
           ...failed.map((k) => el('li', {}, `${nameOf(k)} — נכשל: ${entry(k).send.error || 'סיבה לא ידועה'}`))),
       );
       resend = el('input', { type: 'checkbox', id: 'send-resend' });
       resend.addEventListener('change', update);
-      const label = already.length && failed.length
-        ? 'לשלוח שוב גם למי שכבר קיבל ולמי שהשליחה אליו נכשלה'
-        : already.length ? 'לשלוח שוב גם למי שכבר קיבל' : 'לשלוח שוב גם למי שהשליחה אליו נכשלה';
+      const who = [];
+      if (already.length) who.push('מי שכבר קיבל');
+      if (sending.length) who.push('מי שבשליחה כרגע');
+      if (failed.length) who.push('מי שהשליחה אליו נכשלה');
+      const label = `לשלוח שוב גם ל${who.join(' ול')}`;
       parts.push(el('label', { class: 'check' }, resend, ` ${label}`));
     }
     parts.push(el('div', { class: 'row-actions' }, ok, cancel));

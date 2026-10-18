@@ -33,8 +33,12 @@ export async function parseContactsWorkbook(buffer) {
       if (!name && !rawPhone) continue;
       if (!rawPhone) continue;
       const phone = normalizePhone(rawPhone);
-      if (!name || !phone) {
+      if (!phone) {
         errors.push({ row: r, message: `שורה ${r}: מספר טלפון לא תקין` });
+        continue;
+      }
+      if (!name) {
+        errors.push({ row: r, message: `שורה ${r}: חסר שם` });
         continue;
       }
       rows.push({ row: r, name, phone });
@@ -69,5 +73,9 @@ export function matchContacts(soldiers, contacts) {
       hits.length === 1 ? { status: 'ok', phone: hits[0].phone } : hits.length > 1 ? { status: 'ambiguous' } : { status: 'none' },
     );
   }
+  // one contact that is the only hit of several soldiers can't be told apart → all of them ambiguous
+  const users = new Map();
+  for (const [key, m] of result) if (m.status === 'ok') users.set(m.phone, [...(users.get(m.phone) ?? []), key]);
+  for (const keys of users.values()) if (keys.length > 1) for (const k of keys) result.set(k, { status: 'ambiguous' });
   return result;
 }

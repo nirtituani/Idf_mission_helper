@@ -128,3 +128,12 @@ test('describeError maps codes to Hebrew', () => {
   const { client } = setup([]);
   assert.equal(client.describeError(190), 'אסימון הגישה של Meta אינו תקף');
 });
+
+test('a fetch timeout is not retried (Meta may have accepted the message)', async () => {
+  const timeout = Object.assign(new Error('timed out'), { name: 'TimeoutError' });
+  const s = setup([timeout, resp(200, okBody)]);
+  const r = await s.client.sendTemplate('1', params);
+  assert.equal(r.ok, false);
+  assert.equal(typeof r.error, 'string');
+  assert.equal(s.calls.length, 1);
+});

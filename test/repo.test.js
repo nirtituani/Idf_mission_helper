@@ -125,3 +125,11 @@ describe('postgres repo', { skip: !url && 'TEST_DATABASE_URL not set' }, () => {
     return repo;
   }, async (r, clock, ms) => { await r._backdate(ms); });
 });
+
+test('pg repo logs idle pool errors without the connection string', async () => {
+  const logged = [];
+  const repo = createPgRepo({ databaseUrl: 'postgres://u:secret@127.0.0.1:1/db', cipher: createCipher(key()), log: { error: (...a) => logged.push(a.join(' ')) } });
+  repo._pool.emit('error', Object.assign(new Error('postgres://u:secret@host dropped'), { code: 'ECONNRESET' }));
+  assert.deepEqual(logged, ['db pool: ECONNRESET']);
+  await repo.close();
+});

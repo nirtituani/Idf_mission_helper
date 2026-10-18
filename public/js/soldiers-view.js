@@ -6,7 +6,7 @@ import { createSendPanel, sendChips } from './send-panel.js';
 
 const $ = (id) => document.getElementById(id);
 
-export function createSoldiersView({ api, onStale, pollMs }) {
+export function createSoldiersView({ api, onStale, pollMs, now }) {
   let roster = null;
   let issuesByAssignment = new Map();
   let issuesById = new Map();
@@ -26,6 +26,7 @@ export function createSoldiersView({ api, onStale, pollMs }) {
   const panel = createSendPanel({
     api,
     pollMs,
+    now,
     onStale,
     getRoster: () => roster,
     getSelected: selectedKeys,
