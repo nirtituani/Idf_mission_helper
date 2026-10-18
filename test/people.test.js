@@ -11,6 +11,8 @@ test('almost identical → same soldier', () => {
     ['עידו ברקוביץ', 'עידו ברקוביץה'], // one letter missing
     ['אסף ליבוביץ', 'אסף ליפוביץ'], // one letter changed in last name
     ["ג'ו דה מורה", 'גו דה מוראה'], // apostrophe + one letter
+    ['אור זדה', 'אור זאדה'], // missing vowel letter in a short last name
+    ['דן ימהרן', 'דן יהמרן'], // two adjacent letters swapped
   ]) assert.equal(nameRelation(a, b), 'same', `${a} / ${b}`);
 });
 
@@ -20,6 +22,9 @@ test('not almost identical → never merged', () => {
   assert.equal(nameRelation('רון דמה', 'שי דמה'), null);
   assert.equal(nameRelation('נוי דמה', 'נוה דמה'), null); // first names one letter apart: different people
   assert.equal(nameRelation('טל כהן', 'טל כהו'), null); // last name too short to tolerate a typo
+  assert.equal(nameRelation('נתנאל צמל', 'נתנאל תצל'), null); // two different letters: maybe another person
+  assert.equal(nameRelation('דוד לוי', 'דוד לוין'), null); // extra non-vowel letter on a short name
+  assert.equal(nameRelation('רון אבירם', 'רון אבירמ'), 'same'); // final/regular form handled as one-letter typo
   // Possibly the same, but only reported:
   assert.equal(nameRelation('דמה', 'אור דמה'), 'related');
   assert.equal(nameRelation('אלון', 'אלון בדיה'), 'related');

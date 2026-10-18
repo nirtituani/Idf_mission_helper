@@ -1,8 +1,9 @@
 // Soldier identity. Cells are matched to one soldier when the names are *almost identical*:
 //   * identical after removing spaces/punctuation/markers and collapsing doubled ו/י spelling
 //       (אבי-אור כהן = אבי אור כהן, דני לוי* = דני לוי, נוה כהן = נווה כהן)
-//   * identical first name, last name (≥4 letters) one letter apart
-//       (רון ברקוביץ = רון ברקוביץה, טל ליבוביץ = טל ליפוביץ)
+//   * identical first name, and a last name that is
+//       - one letter apart, or two adjacent letters swapped, when ≥4 letters (רון ברקוביץ = רון ברקוביץה, טל ליבוביץ = טל ליפוביץ, דן ימהרן = דן יהמרן)
+//       - identical once the vowel letters א/ו/י are ignored (אור זדה = אור זאדה)
 // A one-letter difference in the first name is NOT merged (נוי ≠ נוה).
 //   * a short form whose words all appear in exactly ONE longer name (כהן = אור כהן, אלון = אלון לוי)
 // Not merged (reported as "possibly the same" instead): a short form matching several soldiers
@@ -24,6 +25,12 @@ function tokens(name) {
     .filter(Boolean);
 }
 
+function oneAdjacentSwap(a, b) {
+  if (a.length !== b.length) return false;
+  const diff = [...a].map((ch, i) => i).filter((i) => a[i] !== b[i]);
+  return diff.length === 2 && diff[1] === diff[0] + 1 && a[diff[0]] === b[diff[1]] && a[diff[1]] === b[diff[0]];
+}
+
 // 'same' | 'related' | null
 export function nameRelation(a, b) {
   const ta = tokens(a);
@@ -33,7 +40,10 @@ export function nameRelation(a, b) {
   if (!almost && ta.length >= 2 && tb.length >= 2 && ta[0] === tb[0]) {
     const lastA = ta.slice(1).join('');
     const lastB = tb.slice(1).join('');
-    almost = Math.min(lastA.length, lastB.length) >= 4 && levenshtein(lastA, lastB) <= 1;
+    const consonants = (w) => w.replace(/[אוי]/g, '');
+    almost =
+      (Math.min(lastA.length, lastB.length) >= 4 && (levenshtein(lastA, lastB) <= 1 || oneAdjacentSwap(lastA, lastB))) ||
+      (consonants(lastA).length >= 2 && consonants(lastA) === consonants(lastB));
   }
   if (almost) return MULTI.test(a) || MULTI.test(b) ? 'related' : 'same';
   const [short, long] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
