@@ -6,6 +6,7 @@ import { buildRoster } from './roster.js';
 import { validateRoster } from './validate.js';
 import { buildPostOptions, rosterDateRange } from './search.js';
 import { groupBySoldier } from './soldiers.js';
+import { isUnitName } from './people.js';
 
 export async function parseRoster(buffer, { fileName, today, weekStartOverride = null }) {
   const sheets = await readWorkbook(buffer);
@@ -30,7 +31,7 @@ export async function parseRoster(buffer, { fileName, today, weekStartOverride =
     issues: roster.issues,
     soldiers: groupBySoldier(roster.assignments, roster.issues),
     summary: {
-      soldiers: new Set(roster.assignments.map((a) => a.personKey)).size,
+      soldiers: new Set(roster.assignments.filter((a) => !isUnitName(a.person)).map((a) => a.personKey)).size,
       assignments: roster.assignments.length,
       timed: roster.assignments.filter((a) => a.kind === 'timed').length,
       unresolved: roster.assignments.filter((a) => a.kind === 'unresolved').length,

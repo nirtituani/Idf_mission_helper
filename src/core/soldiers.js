@@ -1,6 +1,8 @@
 // Roster grouped by soldier (merged identity from people.js). Built from the same normalized
 // assignments as the search, so both views always agree.
 
+import { isUnitName } from './people.js';
+
 // A cell holding alternates or a note ("א/ב", "א(ב)") is not one identifiable soldier.
 const AMBIGUOUS = /[/\\()]/;
 
@@ -16,6 +18,7 @@ export function groupBySoldier(assignments, issues) {
 
   const byKey = new Map();
   for (const a of assignments) {
+    if (isUnitName(a.person)) continue; // units are not soldiers
     if (!byKey.has(a.personKey)) byKey.set(a.personKey, { key: a.personKey, name: a.person, spellings: new Set(), assignments: [] });
     const s = byKey.get(a.personKey);
     s.spellings.add(a.soldier);

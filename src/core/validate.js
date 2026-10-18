@@ -2,7 +2,7 @@
 // Coverage is not assumed: an empty cell in a row that has a day and hours is reported as an
 // empty slot because the workbook itself defines that slot; nothing else is treated as a gap.
 import { hasNameAnnotation } from './text.js';
-import { identifySoldiers } from './people.js';
+import { identifySoldiers, isUnitName } from './people.js';
 
 export function validateRoster(roster) {
   const { assignments, slots } = roster;
@@ -110,7 +110,3 @@ function groupBy(list, keyFn) {
   return m;
 }
 
-// "מחלקה 2", "פלוגה ב", "צוות 3": a unit written in a person cell, not an individual soldier.
-export function isUnitName(name) {
-  return /^(מחלקה|פלוגה|צוות)(\s|$)/.test(name.trim());
-}

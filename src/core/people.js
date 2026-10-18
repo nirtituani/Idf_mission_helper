@@ -65,6 +65,7 @@ export function identifySoldiers(assignments) {
   const related = [];
   for (let i = 0; i < keys.length; i++) {
     for (let j = i + 1; j < keys.length; j++) {
+      if (isUnitName(counts.get(keys[i]).name) || isUnitName(counts.get(keys[j]).name)) continue; // units never merge with people
       const rel = nameRelation(counts.get(keys[i]).name, counts.get(keys[j]).name);
       if (rel === 'same') parent.set(find(keys[i]), find(keys[j]));
       else if (rel === 'related') related.push([keys[i], keys[j]]);
@@ -118,4 +119,10 @@ export function identifySoldiers(assignments) {
     relatedPeople.push([px.name, py.name]);
   }
   return { merges, related: relatedPeople };
+}
+
+// "מחלקה 2", "פלוגה ב", "צוות 3": a unit written in a person cell, not an individual soldier.
+// Units cover posts (search, board) but are not soldiers (no soldier entry, no message, no overlap).
+export function isUnitName(name) {
+  return /^(מחלקה|פלוגה|צוות)(\s|$)/.test(name.trim());
 }

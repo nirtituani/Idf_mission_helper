@@ -18,7 +18,8 @@ test('soldiers: one entry per merged identity, all spellings kept, Hebrew-sorted
   assert.deepEqual(nava[0].spellings.sort(), ['נווה דמה', 'נוה דמה'].sort());
   const names = roster.soldiers.map((s) => s.name);
   assert.deepEqual(names, [...names].sort((a, b) => a.localeCompare(b, 'he')));
-  assert.equal(roster.soldiers.reduce((n, s) => n + s.assignmentIds.length, 0), roster.assignments.length);
+  const personShifts = roster.assignments.filter((a) => a.person !== 'מחלקה 2').length; // units are not soldiers
+  assert.equal(roster.soldiers.reduce((n, s) => n + s.assignmentIds.length, 0), personShifts);
 });
 
 test('a cell with two names becomes a shared shift for each soldier', () => {
@@ -77,4 +78,10 @@ test('template validation', () => {
   assert.throws(() => validateTemplate({ greeting: 5 }), TemplateError);
   assert.throws(() => validateTemplate(null), TemplateError);
   assert.equal(Object.isFrozen(DEFAULT_TEMPLATE), true);
+});
+
+test('a unit ("מחלקה 2") is not a soldier: not listed, not counted, no message', () => {
+  assert.ok(roster.assignments.some((a) => a.person === 'מחלקה 2')); // still covers posts
+  assert.equal(roster.soldiers.find((s) => s.name === 'מחלקה 2'), undefined);
+  assert.equal(roster.summary.soldiers, roster.soldiers.length);
 });
