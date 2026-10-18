@@ -59,15 +59,18 @@ export function createSendPanel({
   let busy = false; // a send is running
   let timer = null;
   let seq = 0; // only the latest refresh may publish
+  let loadError = false; // #send-status shows a state-load error (cleared by the next good load)
 
   const authorized = () => state?.enabled === true && state.authorized === true;
   const nameOf = (key) => getRoster()?.soldiers.find((s) => s.key === key)?.name ?? key;
   const entry = (key) => (authorized() ? state.soldiers.find((s) => s.key === key) : null);
 
+  // On stale/no-roster the roster is reloaded first (which resets the panel), then the message is
+  // shown — in `node` if it survived the reset, else in the panel's status line.
   async function handleError(e, node) {
     if (e.code === 'stale' || e.code === 'no-roster') {
-      if (node) setStatus(node, 'error', e.message);
       await onStale();
+      setStatus(node?.isConnected ? node : $('send-status'), 'error', e.message);
       return;
     }
     if (node) setStatus(node, 'error', e.message);
@@ -89,14 +92,20 @@ export function createSendPanel({
     try {
       const next = await api('GET', `/api/send/state?rosterVersion=${encodeURIComponent(roster.version)}`);
       if (my !== seq || getRoster()?.version !== roster.version) return; // a newer refresh/roster won
-      setStatus($('send-status'), '');
+      if (loadError) setStatus($('send-status'), '');
+      loadError = false;
       publish(next);
       schedule();
     } catch (e) {
       if (my !== seq) return;
-      $('send-panel').hidden = false;
-      setStatus($('send-status'), 'error', `לא ניתן לטעון את מצב השליחה: ${e.message}`);
-      if (e.code === 'stale' || e.code === 'no-roster') await onStale();
+      if (e.code === 'stale' || e.code === 'no-roster') return onStale();
+      // Shown only in a panel that is already visible (sending may be off or unknown), and the
+      // previous state keeps polling so a transient error doesn't stop the status updates.
+      if (!$('send-panel').hidden) {
+        loadError = true;
+        setStatus($('send-status'), 'error', `לא ניתן לטעון את מצב השליחה: ${e.message}`);
+      }
+      schedule();
     }
   }
 
@@ -157,10 +166,11 @@ export function createSendPanel({
     try {
       await api('POST', '/api/auth', { code: input.value });
       input.value = '';
+      setStatus($('send-status'), '');
       await refresh();
     } catch (err) {
+      if (err.code === 'no-roster') await onStale(); // reload first: it resets the status line
       setStatus($('send-status'), 'error', err.message); // a wrong code (401) stays on the form
-      if (err.code === 'no-roster') await onStale();
     }
   });
 
@@ -248,7 +258,14 @@ export function createSendPanel({
       parts.push(el('label', { class: 'check' }, resend, ` ${label}`));
     }
     parts.push(el('div', { class: 'row-actions' }, ok, cancel));
-    ok.addEventListener('click', () => run(targets(), resend?.checked === true));
+    // Re-checked against the state at click time: a poll may have made someone ineligible.
+    ok.addEventListener('click', () => {
+      const now = targets().filter((k) => {
+        const st = entry(k);
+        return st && st.sendable && st.contact === 'ok';
+      });
+      run(now, resend?.checked === true);
+    });
     cancel.addEventListener('click', hideConfirm);
     const box = $('send-confirm');
     box.replaceChildren(...parts);
@@ -261,11 +278,14 @@ export function createSendPanel({
   // ---- send: chunks of 5, progress, summary ----
   async function run(keys, resend) {
     hideConfirm();
-    if (!keys.length) return;
     const roster = getRoster();
     const host = $('send-progress');
     const line = el('p', {});
     host.replaceChildren(line);
+    if (!keys.length) {
+      setStatus(line, 'warn', 'לא נשלח דבר: אף אחד מהנבחרים אינו זמין עוד לשליחה (המצב עודכן).');
+      return;
+    }
     busy = true;
     renderButton();
     const results = [];
@@ -282,9 +302,13 @@ export function createSendPanel({
       setStatus(line, 'loading', `נשלחו ${results.length} מתוך ${keys.length}`);
     }
     busy = false;
-    renderSummary(host, line, results, keys.length, error);
-    if (error?.code === 'stale' || error?.code === 'no-roster') await onStale();
-    else await refresh();
+    if (error?.code === 'stale' || error?.code === 'no-roster') {
+      await onStale(); // reloads the roster and resets the panel — the summary goes in afterwards
+      renderSummary(host, line, results, keys.length, error);
+    } else {
+      renderSummary(host, line, results, keys.length, error);
+      await refresh();
+    }
   }
 
   function renderSummary(host, line, results, total, error) {

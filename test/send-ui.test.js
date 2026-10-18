@@ -20,10 +20,16 @@ const keyOf = (name) => roster.soldiers.find((s) => s.name === name).key;
 
 // ---- fake server behind the `api` function ----
 const calls = [];
-const server = { state: { enabled: false }, send: null, contacts: null };
+const server = { state: { enabled: false }, send: null, contacts: null, stateFail: 0 };
 const apiError = (status, code, message) => Object.assign(new Error(message), { status, code });
 const routes = {
-  'GET /api/send/state': () => structuredClone(server.state),
+  'GET /api/send/state': () => {
+    if (server.stateFail > 0) {
+      server.stateFail -= 1;
+      throw apiError(500, 'server', 'שגיאת שרת.');
+    }
+    return structuredClone(server.state);
+  },
   'POST /api/auth': (b) => {
     if (b.code !== '1234') throw apiError(401, 'auth', 'קוד הגישה שגוי.');
     server.state = stateFor();
@@ -62,10 +68,12 @@ function stateFor({ template = 'APPROVED', soldiers = {} } = {}) {
 }
 
 const { createSoldiersView } = await import('../public/js/soldiers-view.js');
-const view = createSoldiersView({ api, onStale: async () => {}, pollMs: 40 });
+const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms));
+// Like the real app: onStale reloads the roster, which resets the view and the panel.
+let staleCalls = 0;
+const view = createSoldiersView({ api, onStale: async () => { staleCalls += 1; view.setRoster(roster); await tick(); }, pollMs: 40 });
 const $ = (id) => document.getElementById(id);
 $('view-soldiers').hidden = false;
-const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms));
 const click = (n) => n.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 const row = (name) => [...document.querySelectorAll('#soldier-list .soldier')].find((li) => li.querySelector('.soldier-name').textContent === name);
 const chips = (name) => [...row(name).querySelectorAll('.chip')].map((c) => c.textContent);
@@ -77,6 +85,7 @@ function pick(name, on = true) {
 async function load(state) {
   server.state = state;
   server.send = null;
+  server.stateFail = 0;
   view.setRoster(roster);
   await tick();
 }
@@ -289,7 +298,7 @@ test('contacts upload: count and row errors; a missing header shows no "שורה
 test('state auto-refreshes while a send is not yet delivered/read/failed and the tab is visible', async () => {
   await load(stateFor({ soldiers: { [keyOf('תום דמה')]: { send: { status: 'accepted', error: null, sentAt: '2026-10-18T09:00:00.000Z', changed: false } } } }));
   let n = callsTo('/api/send/state').length;
-  await tick(150);
+  await tick(300);
   assert.ok(callsTo('/api/send/state').length >= n + 2, 'polls while pending');
 
   $('view-soldiers').hidden = true;
@@ -305,6 +314,73 @@ test('state auto-refreshes while a send is not yet delivered/read/failed and the
   assert.equal(callsTo('/api/send/state').length, n, 'no polling once everything is final');
 });
 
+test('roster replaced mid-send (409 on the 2nd chunk): the stop message survives the reload', async () => {
+  await load(stateFor());
+  let n = 0;
+  server.send = (b) => {
+    n += 1;
+    if (n === 2) throw apiError(409, 'stale', 'השיבוץ הוחלף מאז שהמסך נטען. יש לרענן את הנתונים.');
+    return { results: b.personKeys.map((key) => ({ key, status: 'accepted', reason: null })) };
+  };
+  const before = staleCalls;
+  for (const name of ['זיו דמה', 'חן דמה', 'טל דמה', 'יעל דמה', 'כרם דמה', 'לוטם דמה', 'מור דמה']) pick(name);
+  click($('send-selected'));
+  click($('send-confirm-ok'));
+  await tick(200);
+  assert.equal(staleCalls, before + 1);
+  const text = $('send-progress').textContent;
+  assert.match(text, /השליחה נעצרה: השיבוץ הוחלף/);
+  assert.match(text, /\(2 לא נשלחו\)/);
+  assert.match(text, /5 נשלחו/);
+});
+
+test('roster replaced before a contacts upload: the error stays visible after the reload', async () => {
+  await load(stateFor());
+  server.contacts = () => { throw apiError(409, 'stale', 'השיבוץ הוחלף מאז שהמסך נטען. יש לרענן את הנתונים.'); };
+  const input = $('contacts-file');
+  Object.defineProperty(input, 'files', { configurable: true, value: [new dom.window.File(['x'], 'c.xlsx')] });
+  input.dispatchEvent(new dom.window.Event('change'));
+  await tick(120);
+  assert.match($('send-panel').textContent, /השיבוץ הוחלף/);
+});
+
+test('a soldier who became ineligible while the confirm step was open is not sent', async () => {
+  const pending = { [keyOf('תום דמה')]: { send: { status: 'accepted', error: null, sentAt: '2026-10-18T09:00:00.000Z', changed: false } } };
+  await load(stateFor({ soldiers: pending }));
+  calls.length = 0;
+  pick('זיו דמה');
+  pick('חן דמה');
+  click($('send-selected'));
+  assert.match($('send-confirm').textContent, /לשלוח הודעה ל־2 חיילים\?/);
+  server.state = stateFor({ soldiers: { ...pending, [keyOf('זיו דמה')]: { contact: 'none' } } });
+  await tick(200); // a poll picks up the new state while the dialog is open
+  assert.ok(callsTo('/api/send/state').length >= 1);
+  click($('send-confirm-ok'));
+  await tick(60);
+  assert.deepEqual(callsTo('/api/send').map((c) => c.body.personKeys), [[keyOf('חן דמה')]]);
+});
+
+test('a failed poll keeps polling; a load error never reveals a hidden panel', async () => {
+  await load(stateFor({ soldiers: { [keyOf('תום דמה')]: { send: { status: 'accepted', error: null, sentAt: '2026-10-18T09:00:00.000Z', changed: false } } } }));
+  server.stateFail = 1000; // the server keeps failing
+  const n = callsTo('/api/send/state').length;
+  await tick(300);
+  assert.ok(callsTo('/api/send/state').length >= n + 2, 'polling continues through errors');
+  assert.match($('send-status').textContent, /לא ניתן לטעון את מצב השליחה/);
+  server.stateFail = 0;
+  await tick(200);
+  assert.equal($('send-status').textContent, ''); // cleared by the next successful load
+
+  server.state = { enabled: false };
+  view.setRoster(roster);
+  await tick();
+  assert.equal($('send-panel').hidden, true);
+  server.stateFail = 1;
+  view.setRoster(roster);
+  await tick();
+  assert.equal($('send-panel').hidden, true);
+});
+
 test('privacy page is served (with and without .html), standalone, with the operator contact; linked in the footer', async () => {
   const app = createApp({ store: createSessionStore({ idleTtlMs: 1e6, maxAgeMs: 1e6 }), log: { warn() {}, error() {} } });
   for (const url of ['/privacy', '/privacy.html']) {
@@ -314,6 +390,7 @@ test('privacy page is served (with and without .html), standalone, with the oper
     assert.match(res.text, /^<!doctype html>/i);
     assert.match(res.text, /nirtituani13@gmail\.com/);
     assert.match(res.text, /Nir Tituani/);
+    assert.ok(!/[Nn]ames and phone numbers[^.]*stored encrypted/.test(res.text), 'only phone numbers are encrypted');
     assert.match(res.text, /<meta name="viewport"/);
     assert.match(res.text, /href="\/styles\.css"/);
     assert.ok(!/<script(?![^>]*\bsrc=)/i.test(res.text), 'no inline scripts (CSP)');
