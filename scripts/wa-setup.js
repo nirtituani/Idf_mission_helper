@@ -28,7 +28,7 @@ async function graph(path, method = 'GET') {
 }
 
 const sub = await graph(`${waba}/subscribed_apps`, 'POST');
-console.log(`subscribed: ${sub.error ? `no (${sub.error})` : sub.success ? 'yes' : 'no'}`);
+console.log(`subscribed: ${sub.success ? 'yes' : `no (${sub.error || 'no success in response'})`}`);
 
 const tpl = await graph(`${waba}/message_templates?name=${encodeURIComponent(templateName)}&fields=name,language,status`);
 if (tpl.error) console.log(`template: error (${tpl.error})`);

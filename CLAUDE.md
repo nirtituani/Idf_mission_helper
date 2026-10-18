@@ -68,8 +68,8 @@ per-soldier status, no duplicate sends, delivery status via webhook `/webhooks/w
 - Local dev: `WA_FAKE=1 npm start` (ignored in production) — in-memory repo + fake client, code `1234`,
   nothing leaves the machine.
 - One-time Meta setup: `npm run wa:setup`; full checklist in README. Test send goes to `WA_TEST_PHONE`
-  (`/api/send/test`) before any real send. Webhooks need an always-on server → Render Starter ($7/month);
-  ask the user before changing the plan. ~70 soldiers, weekly.
+  (`/api/send/test`) before any real send. Runs on Render free (Meta retries webhooks while the service wakes);
+  changing the plan costs money — ask the user first. ~70 soldiers, weekly.
 
 ## Working with the user
 Explain in simple terms; ask before costs or anything outward-facing; report honestly what was tested.

@@ -12,7 +12,7 @@ WhatsApp sending (contacts upload, template send, delivery status) is built; it 
 
 ```bash
 npm install
-npm test        # 107 tests: parsing, validation, searches, identity, messages, weekly board, sessions/privacy, UI
+npm test        # parsing, validation, searches, identity, messages, weekly board, sessions/privacy, UI
 npm start       # http://localhost:3000
 ```
 
@@ -116,7 +116,7 @@ trusts one proxy hop for the client IP). On Render: **New → Blueprint → pick
 
 The free plan sleeps after ~15 minutes without traffic; because rosters live only in memory, a sleeping
 server forgets uploads (upload again) and the first visit takes ~1 minute to wake. The `starter` plan is
-always on — needed once WhatsApp webhooks are connected.
+always on (optional, not required): on the free plan Meta retries webhook delivery and the first request wakes the service. Changing the plan is the owner's decision.
 
 ### WhatsApp sending — רשימת הקמה (חד־פעמי)
 
@@ -147,7 +147,7 @@ always on — needed once WhatsApp webhooks are connected.
 7. **פרסום האפליקציה:** ב-App settings → Basic להזין Privacy policy URL = `https://idf-mission-helper.onrender.com/privacy.html`, ואז להעביר את האפליקציה למצב Live — בלי זה Meta לא שולחת webhooks אמיתיים.
 8. **שליחת בדיקה** (למספר `WA_TEST_PHONE`) מהאתר, לוודא שההודעה והסטטוס מגיעים — ורק אחר כך שליחה אמיתית.
 
-ב-free plan השרת נרדם, ולכן webhooks עלולים ללכת לאיבוד; לשליחה אמיתית מומלץ `starter`.
+ב-free plan השרת עלול להיות רדום: Meta שולחת webhooks שוב, והבקשה הראשונה מעירה את השירות. שינוי התוכנית הוא החלטה של הבעלים.
 
 Public-internet protections: per-IP rate limits (300 API requests/min, 20 uploads/10 min), a cap on
 simultaneous sessions (`MAX_SESSIONS`, default 40 — new visitors get "busy" rather than exhausting memory),
