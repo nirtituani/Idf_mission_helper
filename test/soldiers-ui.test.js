@@ -18,6 +18,7 @@ const previewCalls = [];
 globalThis.fetch = async (url, opts = {}) => {
   const json = (status, body) => ({ ok: status < 400, status, json: async () => body });
   if (url === '/api/roster') return json(200, roster);
+  if (url.startsWith('/api/send/state?')) return json(200, { enabled: false });
   if (url === '/api/messages/preview') {
     const { personKeys } = JSON.parse(opts.body);
     previewCalls.push(personKeys);
@@ -94,6 +95,13 @@ test('expanding a soldier shows their assignments with source cells and the mess
 test('the old editable message wording is gone', () => {
   assert.equal($('template-form'), null);
   assert.equal(document.querySelector('.template-box'), null);
+});
+
+test('sending not configured on the server: no send panel, no "not connected" notice', () => {
+  assert.equal($('send-panel').hidden, true);
+  assert.equal($('send-selected').hidden, true);
+  assert.equal(document.querySelector('.notice'), null);
+  assert.equal(document.querySelectorAll('#soldier-list .chip').length, 0);
 });
 
 test('problems box: overlaps are listed, notes/merges are not', () => {

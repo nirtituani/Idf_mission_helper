@@ -45,6 +45,8 @@ export function createApp({
     : disabledWebhookRouter());
   app.use(express.json({ limit: '10kb' }));
   app.use(express.static(PUBLIC_DIR, { index: 'index.html' }));
+  // Public privacy policy (its URL is entered in the Meta app settings).
+  app.get('/privacy', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'privacy.html')));
   // The browser shares these pure core modules (no Node APIs) — an explicit allowlist, not the folder.
   for (const file of ['dates.js', 'filters.js', 'week.js', 'shifts.js']) {
     app.get(`/core/${file}`, (req, res) => res.type('text/javascript').sendFile(path.join(PUBLIC_DIR, '..', 'src', 'core', file)));

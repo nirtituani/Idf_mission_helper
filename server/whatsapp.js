@@ -82,3 +82,18 @@ export function createWhatsAppClient({
 
   return { sendTemplate, templateStatus, describeError };
 }
+
+// Local development stand-in (WA_FAKE=1): accepts every message, template always approved.
+export function createFakeWhatsAppClient() {
+  let n = 0;
+  return {
+    async sendTemplate() {
+      n += 1;
+      return { ok: true, wamid: `wamid.fake-${n}` };
+    },
+    async templateStatus() {
+      return 'APPROVED';
+    },
+    describeError,
+  };
+}

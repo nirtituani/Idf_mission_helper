@@ -7,6 +7,7 @@ import { createApp } from '../server/app.js';
 import { createSessionStore } from '../server/sessions.js';
 import { createMemoryRepo } from '../server/repo.js';
 import { loadConfig } from '../server/config.js';
+import { createFakeWhatsAppClient } from '../server/whatsapp.js';
 import { parseRoster } from '../src/core/index.js';
 import { buildWaMessage } from '../src/core/wa-message.js';
 import { buildMainFixture, buildContactsFixture } from './fixtures/build.js';
@@ -82,6 +83,24 @@ test('loadConfig: all vars present → enabled; any missing → disabled with na
   assert.deepEqual(off.missing.sort(), ['SEND_CODE', 'WA_TOKEN']);
   assert.equal(loadConfig({ ...env, PHONE_ENC_KEY: 'short' }).enabled, false);
   assert.equal(loadConfig({ ...env, WA_TEST_PHONE: undefined }).enabled, true); // test phone optional
+});
+
+test('loadConfig: WA_FAKE=1 enables a local fake (memory repo + fake client), never in production', async () => {
+  const fake = loadConfig({ WA_FAKE: '1' });
+  assert.equal(fake.enabled, true);
+  assert.equal(fake.fake, true);
+  assert.equal(fake.sendCode, '1234');
+  assert.equal(fake.testPhone, '972500000000');
+  assert.equal(loadConfig({ WA_FAKE: '1', SEND_CODE: 'אחר' }).sendCode, 'אחר');
+  const prod = loadConfig({ WA_FAKE: '1', NODE_ENV: 'production' });
+  assert.equal(prod.enabled, false);
+  assert.equal(prod.fake, false);
+  assert.equal(loadConfig({}).fake, false);
+
+  const client = createFakeWhatsAppClient();
+  assert.equal(await client.templateStatus(), 'APPROVED');
+  assert.deepEqual(await client.sendTemplate('972500000000', ['a']), { ok: true, wamid: 'wamid.fake-1' });
+  assert.deepEqual(await client.sendTemplate('972500000000', ['a']), { ok: true, wamid: 'wamid.fake-2' });
 });
 
 test('every send/contacts route is 401 before the access code', async () => {

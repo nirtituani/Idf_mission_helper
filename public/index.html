@@ -105,13 +105,32 @@
       <h2>שיבוץ לפי חייל</h2>
       <p id="soldiers-empty" class="empty">יש להעלות קובץ שיבוץ כדי לראות את השיבוץ לפי חייל.</p>
       <div id="soldiers-body" hidden>
-        <p class="notice">שליחה ב־WhatsApp עדיין לא מחוברת (נדרש מספר ייעודי והגדרת Meta). כרגע ניתן להכין הודעות, לבדוק אותן ולהעתיק.</p>
+        <section id="send-panel" class="send-panel" aria-labelledby="send-title" hidden>
+          <h3 id="send-title">שליחה ב־WhatsApp</h3>
+          <form id="send-auth" class="send-auth">
+            <label class="field"><span class="field-label">קוד גישה לשליחה</span><input id="send-code" type="password" autocomplete="off" required></label>
+            <button type="submit" class="btn btn-primary">כניסה</button>
+          </form>
+          <div id="send-tools" hidden>
+            <p id="send-template" class="send-line"></p>
+            <div class="send-contacts">
+              <p id="contacts-info" class="send-line"></p>
+              <label class="btn file-btn">העלאת קובץ אנשי קשר<input id="contacts-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
+            </div>
+            <p class="muted small">קובץ Excel עם העמודות "שם" ו"טלפון". כל העלאה מחליפה את כל הרשימה השמורה. מספרי הטלפון נשמרים מוצפנים בשרת ואינם מוצגים באתר.</p>
+            <div id="contacts-status" class="status-box" aria-live="polite"></div>
+          </div>
+          <p id="send-status" class="status" role="status" aria-live="polite"></p>
+        </section>
         <div class="soldier-tools">
           <label class="field"><span class="field-label">חיפוש חייל</span><input id="soldier-filter" type="search" autocomplete="off"></label>
           <label class="check"><input type="checkbox" id="select-all"> בחירת כל המוצגים</label>
-          <button id="preview-selected" type="button" class="btn btn-primary" disabled>הכנת הודעות לנבחרים</button>
+          <button id="preview-selected" type="button" class="btn" disabled>הכנת הודעות לנבחרים</button>
+          <button id="send-selected" type="button" class="btn btn-primary" hidden disabled>שליחה לנבחרים</button>
         </div>
         <p id="selected-count" class="muted small" aria-live="polite"></p>
+        <div id="send-confirm" class="confirm-box" role="dialog" aria-labelledby="send-confirm-title" tabindex="-1" hidden></div>
+        <div id="send-progress" class="status-box" aria-live="polite"></div>
         <ul id="soldier-list" class="soldier-list"></ul>
         <div id="bulk-preview" aria-live="polite"></div>
       </div>
@@ -143,7 +162,8 @@
   </main>
 
   <footer class="foot">
-    הנתונים נשמרים בזיכרון השרת בלבד, משויכים לדפדפן זה, ונמחקים לאחר 8 שעות ללא פעילות (ולכל היותר 24 שעות) או בלחיצה על "מחיקת השיבוץ מהשרת".
+    קובץ השיבוץ נשמר בזיכרון השרת בלבד, משויך לדפדפן זה, ונמחק לאחר 8 שעות ללא פעילות (ולכל היותר 24 שעות) או בלחיצה על "מחיקת השיבוץ מהשרת".
+    <a href="/privacy">מדיניות פרטיות</a>
   </footer>
 </body>
 </html>
