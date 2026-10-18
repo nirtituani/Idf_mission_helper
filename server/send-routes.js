@@ -13,7 +13,22 @@ const CONTACT_REASON = {
   none: 'אין מספר טלפון לחייל זה ברשימת אנשי הקשר.',
   ambiguous: 'יותר מאיש קשר אחד מתאים לשם — לא נשלח.',
 };
-const TEMPLATE_MESSAGE = 'תבנית ההודעה עדיין לא אושרה על ידי Meta — לא ניתן לשלוח כרגע.';
+const TEMPLATE_STATUS_TEXT = {
+  PENDING: 'ממתינה לאישור Meta',
+  REJECTED: 'נדחתה על ידי Meta',
+  MISSING: 'לא נמצאה בחשבון Meta',
+  ERROR: 'לא ניתן לבדוק כרגע את הסטטוס שלה',
+};
+const templateReason = (dayCount, status) =>
+  `תבנית ההודעה ל־${dayCount} ימים ${TEMPLATE_STATUS_TEXT[status] ?? `אינה זמינה (${status})`} — לא ניתן לשלוח כרגע.`;
+
+// One status for the screen: APPROVED when every needed template is approved, PARTIAL when some
+// are, otherwise the most telling status among them.
+function overallTemplateStatus(statuses) {
+  if (statuses.length && statuses.every((s) => s === 'APPROVED')) return 'APPROVED';
+  if (statuses.includes('APPROVED')) return 'PARTIAL';
+  return ['PENDING', 'REJECTED', 'MISSING', 'ERROR'].find((s) => statuses.includes(s)) ?? statuses[0] ?? 'MISSING';
+}
 
 function reservedReason(existing) {
   if (existing?.status === 'sending') return 'שליחה לחייל זה מתבצעת כרגע';
@@ -41,10 +56,13 @@ export function registerSendRoutes(app, { enabled, wa, repo, sendCode, testPhone
     req.session.authorized === true ? next() : res.status(401).json({ error: 'auth', message: 'יש להזין את קוד הגישה.' });
   const gate = [requireRoster, requireEnabled, requireAuth];
 
-  const templateApproved = async (res) => {
-    if ((await wa.templateStatus()) === 'APPROVED') return true;
-    res.status(409).json({ error: 'template', message: TEMPLATE_MESSAGE });
-    return false;
+  // A sendable message also needs its day-count template approved by Meta. Returns the message
+  // with sendable/problems updated for the template status.
+  const withTemplate = async (msg) => {
+    if (!msg.sendable) return msg;
+    const status = await wa.templateStatus(msg.dayCount);
+    if (status === 'APPROVED') return { ...msg, templateStatus: status };
+    return { ...msg, templateStatus: status, sendable: false, problems: [templateReason(msg.dayCount, status)] };
   };
 
   app.post('/api/auth', authLimiter, requireRoster, requireEnabled, (req, res) => {
@@ -63,16 +81,17 @@ export function registerSendRoutes(app, { enabled, wa, repo, sendCode, testPhone
     if (checkVersion(req, res, req.query.rosterVersion)) return;
     try {
       const weekStart = roster.weekStart?.date ?? null;
-      const [template, contacts, info, sends] = await Promise.all([
-        wa.templateStatus(),
+      const [contacts, info, sends] = await Promise.all([
         repo.listContacts(),
         repo.contactsInfo(),
         weekStart ? repo.listSends(weekStart) : new Map(),
       ]);
       const matches = matchContacts(roster.soldiers, contacts);
       const build = rosterMessageBuilder(roster);
-      const soldiers = roster.soldiers.map((s) => {
-        const msg = build(s);
+      const msgs = await Promise.all(roster.soldiers.map((s) => withTemplate(build(s))));
+      const template = overallTemplateStatus(msgs.filter((m) => m.templateStatus).map((m) => m.templateStatus));
+      const soldiers = roster.soldiers.map((s, i) => {
+        const msg = msgs[i];
         const rec = sends.get(s.key);
         return {
           key: s.key,
@@ -120,7 +139,6 @@ export function registerSendRoutes(app, { enabled, wa, repo, sendCode, testPhone
       return res.status(400).json({ error: 'query', message: 'חייל שנבחר אינו קיים בשיבוץ הנוכחי.' });
     }
     try {
-      if (!(await templateApproved(res))) return;
       const weekStart = roster.weekStart?.date ?? null;
       const matches = matchContacts(roster.soldiers, await repo.listContacts());
       const build = rosterMessageBuilder(roster);
@@ -130,7 +148,7 @@ export function registerSendRoutes(app, { enabled, wa, repo, sendCode, testPhone
         let accepted = false; // true once WhatsApp took the message
         try {
           const soldier = soldiers.get(key);
-          const msg = build(soldier);
+          const msg = await withTemplate(build(soldier));
           if (!msg.sendable) {
             results.push({ key, status: 'skipped', reason: msg.problems[0] });
             continue;
@@ -174,8 +192,7 @@ export function registerSendRoutes(app, { enabled, wa, repo, sendCode, testPhone
     const soldier = roster.soldiers.find((s) => s.key === personKey);
     if (!soldier) return res.status(400).json({ error: 'query', message: 'חייל שנבחר אינו קיים בשיבוץ הנוכחי.' });
     try {
-      if (!(await templateApproved(res))) return;
-      const msg = rosterMessageBuilder(roster)(soldier);
+      const msg = await withTemplate(rosterMessageBuilder(roster)(soldier));
       if (!msg.sendable) return res.json({ key: personKey, status: 'skipped', reason: msg.problems[0] });
       // Test sends bypass the duplicate guard and write no send record.
       const r = await wa.sendTemplate(to, msg.params);

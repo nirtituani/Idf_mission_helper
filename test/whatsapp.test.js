@@ -18,7 +18,7 @@ function setup(handlers, extra = {}) {
   };
   const client = createWhatsAppClient({
     token: 'tok-dummy', phoneNumberId: '111', wabaId: '222',
-    templateName: 'duty_roster_week', templateLang: 'he',
+    templatePrefix: 'duty_roster_days_', templateLang: 'he',
     fetch, sleep: async (ms) => { sleeps.push(ms); }, ...extra,
   });
   return { client, calls, sleeps };
@@ -37,7 +37,7 @@ test('sendTemplate sends exact request and returns wamid', async () => {
   assert.deepEqual(JSON.parse(calls[0].opts.body), {
     messaging_product: 'whatsapp', to: '972500000001', type: 'template',
     template: {
-      name: 'duty_roster_week', language: { code: 'he' },
+      name: 'duty_roster_days_8', language: { code: 'he' },
       components: [{ type: 'body', parameters: params.map((text) => ({ type: 'text', text })) }],
     },
   });
@@ -82,39 +82,50 @@ test('request uses a timeout signal', async () => {
   assert.ok(calls[0].opts.signal);
 });
 
-test('templateStatus requests list, caches 5 minutes, picks matching language', async () => {
+test('sendTemplate picks the template by number of day params', async () => {
+  const { client, calls } = setup([resp(200, okBody)]);
+  await client.sendTemplate('972500000001', ['name', 'range', 'day a', 'day b']);
+  assert.equal(JSON.parse(calls[0].opts.body).template.name, 'duty_roster_days_2');
+});
+
+test('templateStatus(k) reads one list, caches 5 minutes, matches name and language', async () => {
   let t = 1000;
   const body = { data: [
-    { name: 'duty_roster_week', status: 'REJECTED', language: 'en' },
-    { name: 'duty_roster_week', status: 'APPROVED', language: 'he' },
+    { name: 'duty_roster_days_1', status: 'REJECTED', language: 'en' },
+    { name: 'duty_roster_days_1', status: 'APPROVED', language: 'he' },
+    { name: 'duty_roster_days_2', status: 'PENDING', language: 'he' },
+    { name: 'other_template', status: 'APPROVED', language: 'he' },
   ] };
   const { client, calls } = setup([resp(200, body), resp(200, { data: [] })], { now: () => t });
-  assert.equal(await client.templateStatus(), 'APPROVED');
-  assert.equal(calls[0].url, 'https://graph.facebook.com/v25.0/222/message_templates?name=duty_roster_week&fields=name,status,language');
+  assert.equal(await client.templateStatus(1), 'APPROVED');
+  assert.equal(await client.templateStatus(2), 'PENDING');
+  assert.equal(await client.templateStatus(3), 'MISSING');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://graph.facebook.com/v25.0/222/message_templates?fields=name,status,language&limit=200');
   assert.equal(calls[0].opts.headers.Authorization, 'Bearer tok-dummy');
   t += 4 * 60 * 1000;
-  assert.equal(await client.templateStatus(), 'APPROVED');
+  assert.equal(await client.templateStatus(1), 'APPROVED');
   assert.equal(calls.length, 1);
   t += 2 * 60 * 1000;
-  assert.equal(await client.templateStatus(), 'MISSING');
+  assert.equal(await client.templateStatus(1), 'MISSING');
   assert.equal(calls.length, 2);
 });
 
 test('templateStatus language mismatch is MISSING', async () => {
-  const { client } = setup([resp(200, { data: [{ name: 'duty_roster_week', status: 'APPROVED', language: 'en' }] })]);
-  assert.equal(await client.templateStatus(), 'MISSING');
+  const { client } = setup([resp(200, { data: [{ name: 'duty_roster_days_1', status: 'APPROVED', language: 'en' }] })]);
+  assert.equal(await client.templateStatus(1), 'MISSING');
 });
 
 test('templateStatus ERROR is not cached', async () => {
-  const { client, calls } = setup([resp(500, {}), resp(200, { data: [{ status: 'PENDING', language: 'he' }] })]);
-  assert.equal(await client.templateStatus(), 'ERROR');
-  assert.equal(await client.templateStatus(), 'PENDING');
+  const { client, calls } = setup([resp(500, {}), resp(200, { data: [{ name: 'duty_roster_days_1', status: 'PENDING', language: 'he' }] })]);
+  assert.equal(await client.templateStatus(1), 'ERROR');
+  assert.equal(await client.templateStatus(1), 'PENDING');
   assert.equal(calls.length, 2);
 });
 
 test('templateStatus network failure is ERROR', async () => {
   const { client } = setup([new Error('boom')]);
-  assert.equal(await client.templateStatus(), 'ERROR');
+  assert.equal(await client.templateStatus(1), 'ERROR');
 });
 
 test('describeError maps codes to Hebrew', () => {

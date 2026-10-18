@@ -169,7 +169,7 @@ test('message preview: per-session, version-checked, the exact WhatsApp template
   const [msg] = res.body.messages;
   assert.equal(msg.name, 'גדי דמה');
   assert.match(msg.text, /^שלום גדי דמה,\nאלה השיבוצים שלך לפי קובץ השיבוץ לשבוע 11\/10 עד 18\/10:\n/);
-  assert.match(msg.text, /\nשני 12\/10: 06:00 עד 14:00 · סיור \/ מפקד – סיור • 08:00 עד 12:00 · סטטיות \/ ש״ג\n/);
+  assert.match(msg.text, /\n• יום שני 12\/10: 06:00 עד 14:00 · סיור \/ מפקד – סיור • 08:00 עד 12:00 · סטטיות \/ ש״ג\n/);
   assert.deepEqual(msg.problems, []);
   assert.equal(msg.warnings.length, 1); // his double booking
   assert.equal(msg.sendable, true);
@@ -190,7 +190,7 @@ test('message preview follows the week-start override', async () => {
   const key = roster.soldiers.find((s) => s.name === 'גדי דמה').key;
   const [msg] = (await a.post('/api/messages/preview').send({ personKeys: [key], rosterVersion: roster.version })).body.messages;
   assert.match(msg.text, /לשבוע 04\/10 עד 11\/10:/);
-  assert.match(msg.text, /\nשני 05\/10: 06:00 עד 14:00/); // day-name shifts move with the week
+  assert.match(msg.text, /\n• יום שני 05\/10: 06:00 עד 14:00/); // day-name shifts move with the week
 });
 
 test('uploads are rate-limited per client', async () => {

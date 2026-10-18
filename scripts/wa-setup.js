@@ -13,7 +13,7 @@ if (missing.length) {
 const token = env.WA_TOKEN.trim();
 const waba = env.WA_WABA_ID.trim();
 const phoneId = env.WA_PHONE_NUMBER_ID.trim();
-const templateName = env.WA_TEMPLATE_NAME?.trim() || 'duty_roster_week';
+const templatePrefix = env.WA_TEMPLATE_PREFIX?.trim() || 'duty_roster_days_';
 const templateLang = env.WA_TEMPLATE_LANG?.trim() || 'he';
 
 async function graph(path, method = 'GET') {
@@ -30,12 +30,15 @@ async function graph(path, method = 'GET') {
 const sub = await graph(`${waba}/subscribed_apps`, 'POST');
 console.log(`subscribed: ${sub.success ? 'yes' : `no (${sub.error || 'no success in response'})`}`);
 
-const tpl = await graph(`${waba}/message_templates?name=${encodeURIComponent(templateName)}&fields=name,language,status`);
+const tpl = await graph(`${waba}/message_templates?fields=name,language,status&limit=200`);
 if (tpl.error) console.log(`template: error (${tpl.error})`);
 else {
-  const found = (tpl.data || []).filter((t) => t.language === templateLang);
-  if (!found.length) console.log(`template ${templateName} (${templateLang}): not found`);
-  for (const t of found) console.log(`template ${t.name} (${t.language}): ${t.status}`);
+  // one template per number of duty days (1–8)
+  for (let k = 1; k <= 8; k++) {
+    const name = `${templatePrefix}${k}`;
+    const t = (tpl.data || []).find((x) => x.name === name && x.language === templateLang);
+    console.log(`template ${name} (${templateLang}): ${t ? t.status : 'not found'}`);
+  }
 }
 
 const ph = await graph(`${phoneId}?fields=display_phone_number,verified_name,quality_rating,status`);
