@@ -127,32 +127,33 @@ export function registerSendRoutes(app, { enabled, wa, repo, sendCode, testPhone
       const results = [];
       let sent = 0;
       for (const key of new Set(personKeys)) {
-        const soldier = soldiers.get(key);
-        const msg = build(soldier);
-        if (!msg.sendable) {
-          results.push({ key, status: 'skipped', reason: msg.problems[0] });
-          continue;
-        }
-        const contact = matches.get(key);
-        if (contact.status !== 'ok') {
-          results.push({ key, status: 'skipped', reason: CONTACT_REASON[contact.status] });
-          continue;
-        }
-        const reserved = await repo.reserveSend({ weekStart, soldierKey: key, soldierName: soldier.name, paramsHash: msg.hash, resend: resend === true });
-        if (!reserved.ok) {
-          results.push({ key, status: 'skipped', reason: reservedReason(reserved.existing) });
-          continue;
-        }
-        if (sent++ > 0) await wait(sendDelayMs);
-        const r = await wa.sendTemplate(contact.phone, msg.params);
         try {
+          const soldier = soldiers.get(key);
+          const msg = build(soldier);
+          if (!msg.sendable) {
+            results.push({ key, status: 'skipped', reason: msg.problems[0] });
+            continue;
+          }
+          const contact = matches.get(key);
+          if (contact.status !== 'ok') {
+            results.push({ key, status: 'skipped', reason: CONTACT_REASON[contact.status] });
+            continue;
+          }
+          const reserved = await repo.reserveSend({ weekStart, soldierKey: key, soldierName: soldier.name, paramsHash: msg.hash, resend: resend === true });
+          if (!reserved.ok) {
+            results.push({ key, status: 'skipped', reason: reservedReason(reserved.existing) });
+            continue;
+          }
+          if (sent++ > 0) await wait(sendDelayMs);
+          const r = await wa.sendTemplate(contact.phone, msg.params);
           await repo.completeSend({ weekStart, soldierKey: key, wamid: r.ok ? r.wamid : null, status: r.ok ? 'accepted' : 'failed', error: r.ok ? null : r.error });
+          results.push({ key, status: r.ok ? 'accepted' : 'failed', reason: r.ok ? null : r.error });
         } catch (e) {
-          // The message already went out (or definitely failed): report it and keep going. The record
-          // stays "sending", which keeps blocking re-sends — safer than risking a duplicate.
-          log.error('send record update failed:', e.message);
+          // A DB/repo error for one soldier must not abort the batch. If it happened after the send,
+          // the row stays "sending" (blocks duplicates; a resend may take it over after 5 minutes).
+          log.error('send failed for one soldier:', e.message);
+          results.push({ key, status: 'failed', reason: 'שגיאת שרת — נסו שוב' });
         }
-        results.push({ key, status: r.ok ? 'accepted' : 'failed', reason: r.ok ? null : r.error });
       }
       res.json({ results });
     } catch (e) {

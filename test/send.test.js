@@ -285,3 +285,50 @@ test('config disabled: state is { enabled: false }, other routes 503, roster/sea
   const search = await agent.post('/api/search').send({ date: '2026-10-12', hour: 9, postId: 'all', rosterVersion: version });
   assert.equal(search.status, 200);
 });
+
+// ---- one soldier's failure must not abort the rest of the batch ----
+const threeContacts = await buildContactsFixture([
+  ['אבי דמה', '0500000003'],
+  ['גדי דמה', '050-0000001'],
+  ['אור דמה', '0500000004'],
+]);
+async function batchSession(app) {
+  const agent = request.agent(app);
+  const up = await agent.post('/api/roster').attach('file', main, 'שבצק.xlsx');
+  await agent.post('/api/auth').send({ code: CODE });
+  assert.equal((await agent.post('/api/contacts').attach('file', threeContacts, 'c.xlsx')).status, 200);
+  return { agent, version: up.body.version };
+}
+const batchKeys = ['אבי דמה', 'גדי דמה', 'אור דמה'].map(keyOf);
+
+test('batch: client failure on the second soldier → accepted / failed / accepted', async () => {
+  const wa = fakeWa();
+  const orig = wa.sendTemplate;
+  wa.sendTemplate = async (to, params) => {
+    const r = await orig(to, params);
+    return wa.calls.length === 2 ? { ok: false, error: 'שגיאת Meta (קוד 1)' } : r;
+  };
+  const { app } = setup({ wa });
+  const { agent, version } = await batchSession(app);
+  const res = await agent.post('/api/send').send({ personKeys: batchKeys, rosterVersion: version, resend: false });
+  assert.deepEqual(res.body.results.map((r) => r.status), ['accepted', 'failed', 'accepted']);
+  assert.equal(wa.calls.length, 3);
+});
+
+test('batch: a throwing repo for one soldier → that soldier failed, others proceed', async () => {
+  const wa = fakeWa();
+  const repo = createMemoryRepo();
+  const complete = repo.completeSend;
+  let thrown = false;
+  repo.completeSend = async (a) => {
+    if (!thrown) { thrown = true; throw new Error('db down'); }
+    return complete(a);
+  };
+  const store = createSessionStore({ idleTtlMs: 8 * HOUR, maxAgeMs: 24 * HOUR });
+  const app = createApp({ store, today: () => '2026-10-17', log: quiet, wa, repo, sendCode: CODE, testPhone: TEST_PHONE, sendEnabled: true, sendDelayMs: 0 });
+  const { agent, version } = await batchSession(app);
+  const res = await agent.post('/api/send').send({ personKeys: batchKeys, rosterVersion: version, resend: false });
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body.results.map((r) => r.status), ['failed', 'accepted', 'accepted']);
+  assert.equal(res.body.results[0].reason, 'שגיאת שרת — נסו שוב');
+});

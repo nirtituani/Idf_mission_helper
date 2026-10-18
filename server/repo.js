@@ -2,7 +2,9 @@ import pg from 'pg';
 
 const RANK = { accepted: 0, sent: 1, delivered: 2, read: 3 };
 
-export function createMemoryRepo() {
+const STALE_SENDING_MS = 5 * 60 * 1000; // a 'sending' row older than this is a crashed/failed send
+
+export function createMemoryRepo({ now = () => new Date() } = {}) {
   let contacts = [];
   let contactsAt = null;
   const sends = new Map(); // `${weekStart}|${soldierKey}` -> row
@@ -20,9 +22,10 @@ export function createMemoryRepo() {
       // check-and-insert is synchronous: no await between the lookup and the write
       const k = id(weekStart, soldierKey);
       const existing = sends.get(k);
-      if (existing && !(resend && existing.status !== 'sending')) return { ok: false, existing: view(existing) };
-      const now = new Date();
-      sends.set(k, { weekStart, soldierKey, soldierName, paramsHash, wamid: null, status: 'sending', error: null, sentAt: now, statusAt: now });
+      const takeover = resend && existing && (existing.status !== 'sending' || now() - existing.statusAt > STALE_SENDING_MS);
+      if (existing && !takeover) return { ok: false, existing: view(existing) };
+      const t = now();
+      sends.set(k, { weekStart, soldierKey, soldierName, paramsHash, wamid: null, status: 'sending', error: null, sentAt: t, statusAt: t });
       return { ok: true };
     },
     async completeSend({ weekStart, soldierKey, wamid, status, error }) {
@@ -31,7 +34,7 @@ export function createMemoryRepo() {
       r.wamid = wamid ?? null;
       r.status = status;
       r.error = error ?? null;
-      r.statusAt = new Date();
+      r.statusAt = now();
     },
     async listSends(weekStart) {
       const m = new Map();
@@ -98,7 +101,7 @@ export function createPgRepo({ databaseUrl, cipher }) {
          ON CONFLICT (week_start, soldier_key) DO UPDATE
            SET soldier_name = EXCLUDED.soldier_name, params_hash = EXCLUDED.params_hash, wamid = NULL,
                status = 'sending', error = NULL, sent_at = now(), status_at = now()
-           WHERE $5::boolean AND sends.status <> 'sending'
+           WHERE $5::boolean AND (sends.status <> 'sending' OR sends.status_at < now() - interval '5 minutes')
          RETURNING soldier_key`,
         [weekStart, soldierKey, soldierName, paramsHash, !!resend]);
       if (ins.rowCount === 1) return { ok: true };
@@ -132,6 +135,8 @@ export function createPgRepo({ databaseUrl, cipher }) {
     },
     // test helper: wipe tables (only used by the TEST_DATABASE_URL contract run)
     async _reset() { await pool.query('TRUNCATE contacts, sends'); },
+    // test helper: make every send row look `ms` older
+    async _backdate(ms) { await pool.query("UPDATE sends SET status_at = status_at - ($1 || ' milliseconds')::interval", [String(ms)]); },
     async close() { await pool.end(); },
   };
 }

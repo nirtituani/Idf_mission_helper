@@ -25,7 +25,9 @@ describe('cipher', () => {
 const W = '2026-10-18';
 const base = { weekStart: W, soldierKey: 'k1', soldierName: 'חייל דמה', paramsHash: 'h1' };
 
-function repoContract(makeRepo) {
+// makeRepo({ now }): the memory repo takes an injectable clock; `ageSend` advances time
+// (memory) or backdates rows (PG) by `ms`.
+function repoContract(makeRepo, ageSend) {
   test('replaceContacts replaces and counts', async () => {
     const r = await makeRepo();
     await r.replaceContacts([{ name: 'א דמה', phone: '972500000001' }, { name: 'ב דמה', phone: '972500000002' }]);
@@ -52,6 +54,18 @@ function repoContract(makeRepo) {
     const m = await r.listSends(W);
     assert.equal(m.get('k1').status, 'sending');
     assert.equal(m.get('k1').paramsHash, 'h2');
+  });
+  test('resend takes over a stale sending row (older than 5 min), not a fresh one', async () => {
+    const clock = { t: Date.now() };
+    const r = await makeRepo({ now: () => new Date(clock.t) });
+    await r.reserveSend({ ...base, resend: false });
+    await ageSend(r, clock, 4 * 60e3);
+    assert.equal((await r.reserveSend({ ...base, resend: true })).ok, false);
+    await ageSend(r, clock, 2 * 60e3); // now 6 min old
+    assert.equal((await r.reserveSend({ ...base, resend: false })).ok, false);
+    assert.equal((await r.reserveSend({ ...base, paramsHash: 'h3', resend: true })).ok, true);
+    assert.equal((await r.listSends(W)).get('k1').paramsHash, 'h3');
+    assert.equal((await r.reserveSend({ ...base, resend: true })).ok, false); // fresh again
   });
   test('concurrent reserves: only one wins', async () => {
     const r = await makeRepo();
@@ -98,7 +112,7 @@ function repoContract(makeRepo) {
   });
 }
 
-describe('memory repo', () => repoContract(async () => createMemoryRepo()));
+describe('memory repo', () => repoContract(async (o) => createMemoryRepo(o), async (r, clock, ms) => { clock.t += ms; }));
 
 const url = process.env.TEST_DATABASE_URL;
 describe('postgres repo', { skip: !url && 'TEST_DATABASE_URL not set' }, () => {
@@ -109,5 +123,5 @@ describe('postgres repo', { skip: !url && 'TEST_DATABASE_URL not set' }, () => {
     repos.push(repo);
     await repo._reset();
     return repo;
-  });
+  }, async (r, clock, ms) => { await r._backdate(ms); });
 });

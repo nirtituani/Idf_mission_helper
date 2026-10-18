@@ -21,6 +21,7 @@ const send = config.enabled
   ? {
       wa: createWhatsAppClient(config.wa),
       repo: createPgRepo({ databaseUrl: config.databaseUrl, cipher: createCipher(config.encKey) }),
+      webhook: { appSecret: config.appSecret, verifyToken: config.verifyToken },
       sendCode: config.sendCode,
       testPhone: config.testPhone,
       sendEnabled: true,

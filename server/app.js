@@ -9,6 +9,7 @@ import { searchOnDuty, SearchError } from '../src/core/search.js';
 import { isIsoDate, todayIso } from '../src/core/dates.js';
 import { rosterMessageBuilder } from '../src/core/wa-message.js';
 import { registerSendRoutes } from './send-routes.js';
+import { webhookRouter, disabledWebhookRouter } from './webhook.js';
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const COOKIE = 'roster_sid';
@@ -16,10 +17,10 @@ const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 const DEFAULT_LIMITS = { uploadsPer10Min: 20, apiPerMinute: 300, authPer15Min: 10 };
 
-// wa/repo/sendCode/testPhone: WhatsApp sending (see send-routes.js); sendEnabled defaults to "all given".
+// wa/repo/sendCode/testPhone: WhatsApp sending (see send-routes.js); webhook: { appSecret, verifyToken }; sendEnabled defaults to "all given".
 export function createApp({
   store, secureCookies = false, today = () => todayIso(), log = console, limits = DEFAULT_LIMITS,
-  wa = null, repo = null, sendCode = null, testPhone = null, sendEnabled = Boolean(wa && repo && sendCode), sendDelayMs = 150,
+  wa = null, repo = null, webhook = null, sendCode = null, testPhone = null, sendEnabled = Boolean(wa && repo && sendCode), sendDelayMs = 150,
 }) {
   const app = express();
   app.disable('x-powered-by');
@@ -38,6 +39,10 @@ export function createApp({
       },
     }),
   );
+  // Meta's status webhook: before express.json (it needs the raw body for the signature check).
+  app.use(webhook?.appSecret && webhook?.verifyToken && repo
+    ? webhookRouter({ repo, appSecret: webhook.appSecret, verifyToken: webhook.verifyToken, log })
+    : disabledWebhookRouter());
   app.use(express.json({ limit: '10kb' }));
   app.use(express.static(PUBLIC_DIR, { index: 'index.html' }));
   // The browser shares these pure core modules (no Node APIs) — an explicit allowlist, not the folder.
