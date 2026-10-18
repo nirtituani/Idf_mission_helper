@@ -56,3 +56,10 @@ test('night shifts: start 00:00–06:00 and end by 08:00 → between the previou
   assert.equal(nightBetween(shift('2026-10-16', 22, 30)), null); // 22:00–06:00 starts in the evening
   assert.equal(nightBetween({ ...shift('2026-10-16', 0, 24), allDay: true }), null);
 });
+
+test('day-range labels: two consecutive days only', () => {
+  assert.deepEqual(parseDayLabel('ראשון - שני'), { weekday: 0, toWeekday: 1 });
+  assert.deepEqual(parseDayLabel('שבת - ראשון'), { weekday: 6, toWeekday: 0 });
+  assert.deepEqual(parseDayLabel('שלישי עד רביעי'), { weekday: 2, toWeekday: 3 });
+  assert.equal(parseDayLabel('ראשון - שלישי'), null); // not consecutive → not guessed
+});

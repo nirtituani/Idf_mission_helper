@@ -78,7 +78,15 @@ export function parseTimeRange(text) {
 }
 
 // "ראשון", "ראשון 11/10", "יום ראשון 11/10/2026". Returns { weekday, day?, month?, year? } or null.
+// Also "ראשון - שני" / "ראשון עד שני": two consecutive days → { weekday, toWeekday }.
 export function parseDayLabel(text) {
+  const range = /^(?:יום\s+)?(\S+)\s*(?:[-\u2013\u2014]|\sעד\s)\s*(\S+)$/.exec(text.trim());
+  if (range) {
+    const weekday = HEBREW_DAYS.indexOf(range[1]);
+    const toWeekday = HEBREW_DAYS.indexOf(range[2]);
+    if (weekday < 0 || toWeekday !== (weekday + 1) % 7) return null;
+    return { weekday, toWeekday };
+  }
   const m = /^(?:יום\s+)?(\S+?)(?:\s+(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?)?$/.exec(text.trim());
   if (!m) return null;
   const weekday = HEBREW_DAYS.indexOf(m[1]);

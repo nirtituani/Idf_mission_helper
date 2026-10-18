@@ -5,7 +5,8 @@
 //                 continues rightwards (increasing column) through contiguous non-empty cells.
 //   title       - the cell directly above the header's first cell (e.g. a merged "סיור" row).
 //   data rows   - every following row with content inside the header's columns, until a blank
-//                 row, another header row, or the title row of the next block.
+//                 row, another header row, or the title row of the next block. Only headers that
+//                 overlap this table's columns count — tables may sit side by side.
 // Header columns are classified by keyword: יום → day, שעות/שעה → hours, משימה → task,
 // מתאריך–עד → date range. Every other header is a person column labelled by its own text.
 // Non-empty cells outside every block are reported as unparsed regions, never guessed at.
@@ -33,7 +34,13 @@ export function findBlocks(sheet) {
     if (DAY_HEADERS.has(k) || RANGE_HEADERS.has(k)) headerStarts.push(cell);
   }
   headerStarts.sort((a, b) => a.r - b.r || a.c - b.c);
-  const headerRowSet = new Set(headerStarts.map((h) => h.r));
+  // Column extent of every header row: from its יום/מתאריך cell rightwards through contiguous cells.
+  const headerSpans = headerStarts.map((h) => {
+    let c1 = h.c;
+    while (text(h.r, c1 + 1)) c1++;
+    return { r: h.r, c0: h.c, c1 };
+  });
+  const headerNear = (r, c0, c1) => headerSpans.some((h) => h.r === r && h.c0 <= c1 && h.c1 >= c0);
 
   const blocks = [];
   for (const start of headerStarts) {
@@ -52,7 +59,9 @@ export function findBlocks(sheet) {
 
     const titleCell = get(start.r - 1, start.c);
     let title = null;
-    if (titleCell && titleCell.text && !headerRowSet.has(start.r - 1)) {
+    const c0 = cols[0].c;
+    const c1 = cols[cols.length - 1].c;
+    if (titleCell && titleCell.text && !headerNear(start.r - 1, c0, c1)) {
       title = { text: titleCell.text, addr: titleCell.masterAddr || titleCell.addr };
       for (const cell of cells.values()) {
         if (cell.r === start.r - 1 && (cell.addr === title.addr || cell.masterAddr === title.addr)) {
@@ -70,7 +79,7 @@ export function findBlocks(sheet) {
 
     const rows = [];
     for (let r = start.r + 1; ; r++) {
-      if (headerRowSet.has(r) || headerRowSet.has(r + 1)) break;
+      if (headerNear(r, c0, c1) || headerNear(r + 1, c0, c1)) break;
       if (!cols.some((x) => text(r, x.c))) break;
       const cellInfo = (col) => {
         if (!col) return null;

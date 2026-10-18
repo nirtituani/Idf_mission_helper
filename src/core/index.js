@@ -21,6 +21,7 @@ export async function parseRoster(buffer, { fileName, today, weekStartOverride =
     fileName,
     sheets: sheetResults.map((s) => ({ name: s.sheet, hidden: s.hidden, tables: s.blocks.length })),
     weekStart: roster.weekStart,
+    weekStarts: roster.weekStarts,
     detectedWeekStart: roster.detectedWeekStart,
     dateRange: rosterDateRange(roster),
     options,

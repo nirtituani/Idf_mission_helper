@@ -3,8 +3,12 @@
 // Dating rules (explicit and tested):
 //   * A day cell with a date ("ראשון 11/10") uses that date. A missing year is resolved to the
 //     year (±1 of the reference) in which that date falls on the stated weekday.
-//   * The roster week start = the Sunday on/before the earliest explicit date in the workbook,
-//     unless the user overrides it. Without either, day-name-only rows stay undated (error).
+//   * Each sheet (tab) is its own week: its week start = the Sunday on/before the earliest explicit
+//     date in that sheet. The user's override replaces it for a single-sheet workbook, and fills in
+//     sheets that have no explicit date. Without either, day-name-only rows stay undated (error).
+//   * A day cell may name two consecutive days ("ראשון - שני"): each shift starts on the first day
+//     at its start time and ends on the second day at its end time ("20:00 - 20:00" = 24 hours,
+//     "17:30-20:00" = Sunday 17:30 → Monday 20:00).
 //   * In a block of day names only, the first day maps to the first matching weekday on/after the
 //     week start; each following day to the next matching weekday after the previous day.
 //   * Rows of the same day are grouped by the merged day cell (or identical consecutive label).
@@ -37,7 +41,7 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
   const ref = (sheet, addr) => `${sheet}!${addr}`;
 
   // ---- 1. Week start from explicit dates -------------------------------------------------
-  let detected = null;
+  const detectedBySheet = new Map();
   for (const { blocks } of sheetResults) {
     for (const block of blocks) {
       for (const row of block.rows) {
@@ -52,18 +56,24 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
         }
         for (const c of candidates) {
           const iso = resolveYear(c.p, today);
-          if (iso && (!detected || iso < detected.firstDate)) {
-            detected = { firstDate: iso, cell: ref(block.sheet, c.addr), text: c.text };
+          const prev = detectedBySheet.get(block.sheet);
+          if (iso && (!prev || iso < prev.firstDate)) {
+            detectedBySheet.set(block.sheet, { firstDate: iso, cell: ref(block.sheet, c.addr), text: c.text });
           }
         }
       }
     }
   }
-  const detectedWeekStart = detected
-    ? { date: addDays(detected.firstDate, -weekdayOf(detected.firstDate)), cell: detected.cell, text: detected.text }
-    : null;
-  const weekStart = weekStartOverride || detectedWeekStart?.date || null;
-  const yearRef = weekStart || today;
+  const usedSheets = sheetResults.filter((s) => s.blocks.length).map((s) => s.sheet);
+  const multiSheet = usedSheets.length > 1;
+  const weekStarts = usedSheets.map((sheet) => {
+    const d = detectedBySheet.get(sheet);
+    const detectedWs = d ? { date: addDays(d.firstDate, -weekdayOf(d.firstDate)), cell: d.cell, text: d.text } : null;
+    if (weekStartOverride && (!multiSheet || !detectedWs)) return { sheet, date: weekStartOverride, source: 'user', cell: null, text: null, detected: detectedWs };
+    if (detectedWs) return { sheet, ...detectedWs, source: 'workbook', detected: detectedWs };
+    return { sheet, date: null, source: null, cell: null, text: null, detected: null };
+  });
+  const weekStartOf = (sheet) => weekStarts.find((w) => w.sheet === sheet)?.date ?? null;
 
   // ---- 2. Assignments ---------------------------------------------------------------------
   const assignments = [];
@@ -111,7 +121,9 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
     return created;
   };
 
-  for (const { blocks } of sheetResults) {
+  for (const { sheet: sheetName, blocks } of sheetResults) {
+    const weekStart = weekStartOf(sheetName);
+    const yearRef = weekStart || today;
     for (const block of blocks) {
       const section = sectionFor(block);
       if (!block.title) {
@@ -201,6 +213,7 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
       let prevDayKey = null;
       let prevGroupMerged = false;
       let groupDate = null;
+      let groupSpansNextDay = false;
       for (const row of block.rows) {
         const day = row.day;
         const isSlave = Boolean(day.masterAddr);
@@ -211,6 +224,7 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
           prevGroupMerged = day.merged;
           prevDayKey = dayKey;
           const parsed = day.text ? parseDayLabel(day.text) : null;
+          groupSpansNextDay = parsed?.toWeekday !== undefined;
           if (!day.text) {
             addIssue('error', 'MISSING_DAY', 'חסר יום בשורה — לא ניתן לשייך את השיבוצים לתאריך.', [ref(block.sheet, day.addr)]);
           } else if (!parsed) {
@@ -245,8 +259,16 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
           if (!row.time.text) {
             if (hasPeople) addIssue('error', 'MISSING_TIME', 'חסרות שעות בשורה שיש בה שיבוצים.', [ref(block.sheet, row.time.addr)]);
           } else {
-            const tr = parseTimeRange(row.time.text);
-            if (tr.error === 'zero-duration') {
+            let tr = parseTimeRange(row.time.text);
+            // "ראשון - שני": the shift ends on the second day at its end time.
+            if (groupSpansNextDay && (!tr.error || tr.error === 'zero-duration')) {
+              const [from, to] = row.time.text.split(/\s*[-\u2013\u2014]\s*/).map(parseTimeOfDay);
+              tr = { startMin: from, durationMin: to + 1440 - from };
+            }
+            // A bad time on a row with no names is only an empty line — nothing to report.
+            if (tr.error && !hasPeople) {
+              /* no assignment, no slot */
+            } else if (tr.error === 'zero-duration') {
               addIssue('error', 'ZERO_DURATION', `משך המשמרת "${row.time.text}" הוא אפס.`, [ref(block.sheet, row.time.addr)]);
             } else if (tr.error) {
               addIssue('error', 'INVALID_TIME', `לא ניתן לפענח את השעות "${row.time.text}".`, [ref(block.sheet, row.time.addr)]);
@@ -280,6 +302,39 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
     }
   }
 
+  // ---- 3. Newer tab wins --------------------------------------------------------------------
+  // When two tabs cover the same post at overlapping times (e.g. the handover Sunday appears in
+  // both weeks), the tab with the later week start replaces the earlier one for that post/time.
+  if (multiSheet) {
+    const rank = new Map(weekStarts.map((w, i) => [w.sheet, [w.date ?? '', i]]));
+    const newer = (a, b) => {
+      const [da, ia] = rank.get(a);
+      const [db, ib] = rank.get(b);
+      return da > db || (da === db && ia > ib);
+    };
+    const sheetOf = (x) => x.sheet ?? x.cell.split('!')[0];
+    const timedItems = [...assignments.filter((a) => a.kind === 'timed'), ...slots.filter((x) => x.startKey !== null)];
+    const replacedBy = (x) =>
+      timedItems.find(
+        (y) => y !== x && sheetOf(y) !== sheetOf(x) && newer(sheetOf(y), sheetOf(x)) &&
+          y.sectionKey === x.sectionKey && y.positionKey === x.positionKey && y.startKey < x.endKey && x.startKey < y.endKey,
+      );
+    const dropped = new Set();
+    for (const a of assignments) {
+      if (a.kind !== 'timed') continue;
+      const by = replacedBy(a);
+      if (!by) continue;
+      dropped.add(a.id);
+      const who = by.person ?? by.soldier ?? 'משבצת ריקה';
+      addIssue('info', 'SUPERSEDED', `"${a.soldier}" (${a.section} / ${a.position}, ${a.start.date.slice(8)}/${a.start.date.slice(5, 7)} ${a.start.time}) הוחלף בשיבוץ מהלשונית "${sheetOf(by)}" (${who}).`, [ref(a.sheet, a.source.cell)]);
+    }
+    const keptSlots = slots.filter((x) => x.startKey === null || !replacedBy(x));
+    slots.splice(0, slots.length, ...keptSlots);
+    const kept = assignments.filter((a) => !dropped.has(a.id));
+    assignments.splice(0, assignments.length, ...kept);
+    for (const issue of issues) issue.assignmentIds = issue.assignmentIds.filter((id) => !dropped.has(id));
+  }
+
   if (missingWeekStartCells.length) {
     addIssue('error', 'NO_WEEK_START', 'לא נמצא בקובץ תאריך מפורש, ולכן לא ניתן לקבוע תאריכים לימים. יש לבחור את תאריך תחילת השבוע.', missingWeekStartCells.slice(0, 5));
   }
@@ -297,10 +352,10 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
   }
 
   return {
-    weekStart: weekStart
-      ? { date: weekStart, source: weekStartOverride ? 'user' : 'workbook', cell: weekStartOverride ? null : detectedWeekStart.cell, text: weekStartOverride ? null : detectedWeekStart.text }
-      : null,
-    detectedWeekStart,
+    // weekStart/detectedWeekStart describe the first sheet (single-sheet workbooks); weekStarts has every sheet.
+    weekStart: weekStarts[0]?.date ? (({ detected, sheet, ...w }) => w)(weekStarts[0]) : null,
+    detectedWeekStart: weekStarts.find((w) => w.detected)?.detected ?? null,
+    weekStarts: weekStarts.map(({ detected, ...w }) => w),
     sections: sections.map(({ key, label, positions }) => ({ key, label, positions })),
     assignments,
     slots,
