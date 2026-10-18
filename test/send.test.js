@@ -251,6 +251,36 @@ test('templates are checked per day count: some approved → PARTIAL, only those
   assert.ok(state.soldiers.some((x) => !x.sendable && /ממתינה לאישור Meta/.test(x.problems[0])));
 });
 
+test('one batch with approved and pending templates: sends the approved, skips the pending', async () => {
+  const wa = fakeWa();
+  const { app, repo } = setup({ wa });
+  const { agent, version } = await session(app);
+  await agent.get(`/api/send/state?rosterVersion=${version}`);
+  const approved = Math.min(...wa.statusCalls);
+  wa.status = (k) => (k === approved ? 'APPROVED' : 'PENDING');
+  const state = (await agent.get(`/api/send/state?rosterVersion=${version}`)).body;
+  const ok = state.soldiers.find((x) => x.sendable);
+  const pending = state.soldiers.find((x) => !x.sendable && /ממתינה לאישור Meta/.test(x.problems[0]));
+  await repo.replaceContacts(roster.soldiers.filter((s) => [ok.key, pending.key].includes(s.key)).map((s, i) => ({ name: s.name, phone: `97250000009${i}` })));
+  const res = await agent.post('/api/send').send({ personKeys: [ok.key, pending.key], rosterVersion: version, resend: false });
+  const byKey = Object.fromEntries(res.body.results.map((r) => [r.key, r]));
+  assert.equal(byKey[ok.key].status, 'accepted');
+  assert.equal(byKey[pending.key].status, 'skipped');
+  assert.match(byKey[pending.key].reason, /ממתינה לאישור Meta/);
+  assert.equal(wa.calls.length, 1);
+  assert.equal(wa.calls[0].params.length - 2, approved);
+});
+
+test('no sendable soldier → template status NONE, not MISSING', async () => {
+  const wa = fakeWa();
+  const { app } = setup({ wa });
+  const { agent } = await session(app);
+  const moved = await agent.put('/api/roster/week-start').send({ date: '2026-10-12' }); // a Monday → every message blocked
+  const state = (await agent.get(`/api/send/state?rosterVersion=${moved.body.version}`)).body;
+  assert.ok(state.soldiers.every((x) => !x.sendable));
+  assert.equal(state.template, 'NONE');
+});
+
 test('bad bodies → 400', async () => {
   const { app, wa } = setup();
   const { agent, version } = await session(app);

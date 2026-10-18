@@ -17,7 +17,8 @@ export function stamp(iso) {
 
 // Why sending is blocked by the template's Meta status, or null when it is approved.
 export function templateBlock(template) {
-  if (template === 'APPROVED' || template === 'PARTIAL') return null; // PARTIAL: blocked per soldier
+  // PARTIAL: blocked per soldier; NONE: no soldier is sendable, each one shows its own reason
+  if (template === 'APPROVED' || template === 'PARTIAL' || template === 'NONE') return null;
   if (template === 'PENDING') return 'התבנית עדיין ממתינה לאישור Meta';
   if (template === 'REJECTED') return 'התבנית נדחתה';
   if (template === 'MISSING') return 'התבנית לא נמצאה בחשבון Meta';
@@ -151,7 +152,9 @@ export function createSendPanel({
         ? el('span', { class: 'inline-warning' }, `⚠ ${block} — השליחה מושבתת עד לאישור.`)
         : state.template === 'PARTIAL'
           ? el('span', { class: 'inline-warning' }, '⚠ חלק מתבניות ההודעה עדיין ממתינות לאישור Meta — חיילים שהתבנית שלהם טרם אושרה מסומנים ולא יישלחו.')
-          : el('span', { class: 'ok-text' }, 'תבניות ההודעה אושרו ב־Meta ✓'),
+          : state.template === 'NONE'
+            ? el('span', { class: 'inline-warning' }, '⚠ אין כרגע חיילים שניתן לשלוח אליהם — הסיבה מופיעה ליד כל חייל.')
+            : el('span', { class: 'ok-text' }, 'תבניות ההודעה אושרו ב־Meta ✓'),
     );
     const c = state.contacts;
     $('contacts-info').replaceChildren(

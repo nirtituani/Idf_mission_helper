@@ -187,6 +187,12 @@ test('some templates approved (PARTIAL) → sending allowed, with a note', async
   assert.match($('send-template').textContent, /חלק מתבניות ההודעה עדיין ממתינות לאישור Meta/);
 });
 
+test('no sendable soldier (NONE) → no false "template missing" message', async () => {
+  await load(stateFor({ template: 'NONE' }));
+  assert.match($('send-template').textContent, /אין כרגע חיילים שניתן לשלוח אליהם/);
+  assert.doesNotMatch($('send-template').textContent, /לא נמצאה/);
+});
+
 test('test send from the soldier detail posts only that soldier', async () => {
   await load(stateFor());
   click(row('טל דמה').querySelector('.soldier-name'));

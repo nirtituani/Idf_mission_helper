@@ -2,6 +2,7 @@
 const GRAPH = 'https://graph.facebook.com/v25.0';
 const TIMEOUT_MS = 15000;
 const CACHE_MS = 5 * 60 * 1000;
+const ERROR_CACHE_MS = 30 * 1000;
 const RETRY_CODES = new Set([130429, 131048, 80007]);
 
 export function describeError(code) {
@@ -66,20 +67,31 @@ export function createWhatsAppClient({
     }
   }
 
-  let cache = null; // { list, at } — every template in the account, one request per 5 minutes
-  async function templateStatus(dayCount) {
-    if (!cache || now() - cache.at >= CACHE_MS) {
+  // Every template in the account, one request per 5 minutes. Concurrent callers share the
+  // in-flight request; a failed lookup is remembered briefly so polling can't hammer Meta.
+  let cache = null; // { list: Promise<array|null>, at, ttl }
+  function templateList() {
+    if (cache && now() - cache.at < cache.ttl) return cache.list;
+    const entry = { at: now(), ttl: CACHE_MS };
+    entry.list = (async () => {
       try {
         const url = `${GRAPH}/${wabaId}/message_templates?fields=name,status,language&limit=200`;
         const res = await fetch(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
-        if (!res.ok) return 'ERROR';
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const body = await res.json();
-        cache = { list: Array.isArray(body?.data) ? body.data : [], at: now() };
+        return Array.isArray(body?.data) ? body.data : [];
       } catch {
-        return 'ERROR';
+        entry.ttl = ERROR_CACHE_MS;
+        return null;
       }
-    }
-    const entry = cache.list.find((t) => t.name === templateFor(dayCount) && t.language === templateLang);
+    })();
+    cache = entry;
+    return entry.list;
+  }
+  async function templateStatus(dayCount) {
+    const list = await templateList();
+    if (!list) return 'ERROR';
+    const entry = list.find((t) => t.name === templateFor(dayCount) && t.language === templateLang);
     return entry?.status && typeof entry.status === 'string' ? entry.status : 'MISSING';
   }
 

@@ -116,11 +116,27 @@ test('templateStatus language mismatch is MISSING', async () => {
   assert.equal(await client.templateStatus(1), 'MISSING');
 });
 
-test('templateStatus ERROR is not cached', async () => {
-  const { client, calls } = setup([resp(500, {}), resp(200, { data: [{ name: 'duty_roster_days_1', status: 'PENDING', language: 'he' }] })]);
+test('templateStatus ERROR is remembered for 30 s only', async () => {
+  let t = 1000;
+  const { client, calls } = setup([resp(500, {}), resp(200, { data: [{ name: 'duty_roster_days_1', status: 'PENDING', language: 'he' }] })], { now: () => t });
   assert.equal(await client.templateStatus(1), 'ERROR');
+  t += 10 * 1000;
+  assert.equal(await client.templateStatus(1), 'ERROR');
+  assert.equal(calls.length, 1);
+  t += 25 * 1000;
   assert.equal(await client.templateStatus(1), 'PENDING');
   assert.equal(calls.length, 2);
+});
+
+test('concurrent templateStatus calls share one request', async () => {
+  const { client, calls } = setup([resp(200, { data: [
+    { name: 'duty_roster_days_1', status: 'APPROVED', language: 'he' },
+    { name: 'duty_roster_days_2', status: 'PENDING', language: 'he' },
+  ] })]);
+  const all = await Promise.all(Array.from({ length: 70 }, (_, i) => client.templateStatus((i % 2) + 1)));
+  assert.equal(calls.length, 1);
+  assert.equal(all.filter((s) => s === 'APPROVED').length, 35);
+  assert.equal(all.filter((s) => s === 'PENDING').length, 35);
 });
 
 test('templateStatus network failure is ERROR', async () => {

@@ -23,9 +23,11 @@ const templateReason = (dayCount, status) =>
   `תבנית ההודעה ל־${dayCount} ימים ${TEMPLATE_STATUS_TEXT[status] ?? `אינה זמינה (${status})`} — לא ניתן לשלוח כרגע.`;
 
 // One status for the screen: APPROVED when every needed template is approved, PARTIAL when some
-// are, otherwise the most telling status among them.
+// are, NONE when no soldier's message is sendable (no template needed), otherwise the most telling
+// status among them.
 function overallTemplateStatus(statuses) {
-  if (statuses.length && statuses.every((s) => s === 'APPROVED')) return 'APPROVED';
+  if (!statuses.length) return 'NONE';
+  if (statuses.every((s) => s === 'APPROVED')) return 'APPROVED';
   if (statuses.includes('APPROVED')) return 'PARTIAL';
   return ['PENDING', 'REJECTED', 'MISSING', 'ERROR'].find((s) => statuses.includes(s)) ?? statuses[0] ?? 'MISSING';
 }
