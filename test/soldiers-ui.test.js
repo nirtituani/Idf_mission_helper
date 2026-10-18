@@ -89,9 +89,11 @@ test('expanding a soldier shows their assignments with source cells and the mess
   assert.match(detail.textContent, /חופפים/); // his overlap warning
 });
 
-test('warnings/notes section is not shown when the file has no errors', () => {
-  assert.equal(roster.summary.issues.error, 0);
-  assert.ok(roster.summary.issues.warning > 0); // warnings exist in the data…
-  assert.equal($('issues').hidden, true); // …but are not displayed
-  assert.ok(!$('summary-list').textContent.includes('אזהרות'));
+test('problems box: overlaps are listed, notes/merges are not', () => {
+  assert.equal($('issues').hidden, false);
+  const text = $('issues-body').textContent;
+  assert.match(text, /חייל משובץ פעמיים באותו זמן \(2\)/); // גדי דמה overlap + סהר דמה duplicate
+  assert.match(text, /גדי דמה/);
+  assert.ok(!/אוחדו|דומים|משבצות ריקות|כולל 2 חיילים/.test(text));
+  assert.ok(!/נתונים שלא נקראו/.test(text)); // no read errors in this file
 });

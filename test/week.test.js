@@ -71,7 +71,7 @@ test('multi-day range appears on every covered day', () => {
 test('post filter limits rows; same semantics as the search', () => {
   const b = buildWeekBoard(roster, WEEK, optionId('סטטיות', 'מזרחית'));
   assert.deepEqual(b.sections.map((s) => [s.label, s.rows.map((r) => r.label)]), [['סטטיות', ['מזרחית']]]);
-  assert.deepEqual(people(day(b.sections[0].rows[0], '2026-10-12', b)), ['מור דמה', 'נוי דמה', 'עדי דמה', 'פז דמה']);
+  assert.deepEqual(people(day(b.sections[0].rows[0], '2026-10-12', b)), ['מור דמה', 'מחלקה 2', 'נוי דמה', 'עדי דמה', 'פז דמה']);
   assert.equal(buildWeekBoard(roster, WEEK, 'g99'), null);
 });
 

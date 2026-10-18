@@ -92,6 +92,7 @@ test('date ranges: explicit, day-name continuation, and non-continuable', async 
 test('validation: overlap, duplicate, annotations, similar names, empty slots, stray region', async () => {
   const r = await parse(await buildMainFixture());
   const c = codes(r);
+  assert.ok(!r.issues.some((i) => i.code === 'OVERLAP' && i.message.includes('מחלקה 2'))); // a unit on two posts is fine
   const overlap = r.issues.find((i) => i.code === 'OVERLAP');
   assert.ok(overlap && overlap.message.includes('גדי דמה'));
   assert.ok(r.issues.some((i) => i.code === 'DUPLICATE' && i.message.includes('סהר דמה')));

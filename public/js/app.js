@@ -193,23 +193,30 @@ async function changeWeekStart(date) {
   }
 }
 
-// ---------- Errors ----------
-// Warnings and notes are not shown (by request). Only real errors — data that could not be read,
-// so shifts may be missing — are surfaced, and only when there are any.
+// ---------- Problems ----------
+// Only real problems are shown (by request): data that could not be read (shifts may be missing)
+// and soldiers booked twice at the same time. Merges, notes and empty slots stay hidden.
+const PROBLEM_GROUPS = [
+  { test: (i) => i.level === 'error', title: 'נתונים שלא נקראו — ייתכן שחסרים שיבוצים' },
+  { test: (i) => i.code === 'OVERLAP' || i.code === 'DUPLICATE', title: 'חייל משובץ פעמיים באותו זמן' },
+];
+
 function renderIssues() {
-  const errors = state.roster.issues.filter((i) => i.level === 'error');
-  $('issues').hidden = errors.length === 0;
+  const groups = PROBLEM_GROUPS.map((g) => ({ ...g, list: state.roster.issues.filter(g.test) })).filter((g) => g.list.length);
+  $('issues').hidden = groups.length === 0;
   $('issues-body').replaceChildren(
-    el('p', {}, 'חלק מהנתונים בקובץ לא נקראו, ולכן ייתכן שחסרים שיבוצים:'),
-    el(
-      'ul',
-      {},
-      ...errors.map((i) => {
-        const li = el('li', {}, el('span', {}, i.message));
-        if (i.cells.length) li.append(el('span', { class: 'cells' }, ...i.cells.slice(0, 8).map((c) => cellChip(c))));
-        return li;
-      }),
-    ),
+    ...groups.flatMap((g) => [
+      el('h3', { class: 'problem-title' }, `${g.title} (${g.list.length})`),
+      el(
+        'ul',
+        { class: 'problem-list' },
+        ...g.list.map((i) => {
+          const li = el('li', {}, el('span', {}, i.message));
+          if (i.cells.length) li.append(el('span', { class: 'cells' }, ...i.cells.slice(0, 8).map((c) => cellChip(c))));
+          return li;
+        }),
+      ),
+    ]),
   );
 }
 

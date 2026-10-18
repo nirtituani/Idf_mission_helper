@@ -25,7 +25,7 @@ test('no filters → every timed shift, time-ordered', () => {
 
 test('job only → all shifts of that post across the week', () => {
   const res = findShifts(roster, { postId: optionId('סטטיות', 'מזרחית') });
-  assert.deepEqual(people(res), ['יעל דמה', 'מור דמה', 'נוי דמה', 'עדי דמה', 'פז דמה']);
+  assert.deepEqual(people(res), ['יעל דמה', 'מור דמה', 'מחלקה 2', 'נוי דמה', 'עדי דמה', 'פז דמה']);
   assert.ok(res.shifts.every((a) => a.position === 'מזרחית'));
 });
 

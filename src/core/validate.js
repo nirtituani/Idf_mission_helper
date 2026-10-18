@@ -15,7 +15,8 @@ export function validateRoster(roster) {
   const { merges, related } = identifySoldiers(assignments);
 
   // Overlapping assignments for the same soldier (after merging near-identical names).
-  const bySoldier = groupBy(timed, (a) => a.personKey);
+  // A unit ("מחלקה 2") may cover several posts at once — that is not a double booking.
+  const bySoldier = groupBy(timed.filter((a) => !isUnitName(a.person)), (a) => a.personKey);
   for (const list of bySoldier.values()) {
     list.sort((x, y) => x.startKey - y.startKey);
     for (let i = 0; i < list.length; i++) {
@@ -37,7 +38,7 @@ export function validateRoster(roster) {
 
   // Cells that look like more than one plain name.
   for (const a of assignments) {
-    if (hasNameAnnotation(a.soldier)) {
+    if (hasNameAnnotation(a.soldier) && !isUnitName(a.soldier)) {
       add('info', 'NAME_ANNOTATION', `בתא "${a.soldier}" יש סימון נוסף לשם (למשל *). הערך מוצג כפי שהוא.`, [cellOf(a)], [a.id]);
     }
   }
@@ -107,4 +108,9 @@ function groupBy(list, keyFn) {
     m.get(k).push(x);
   }
   return m;
+}
+
+// "מחלקה 2", "פלוגה ב", "צוות 3": a unit written in a person cell, not an individual soldier.
+export function isUnitName(name) {
+  return /^(מחלקה|פלוגה|צוות)(\s|$)/.test(name.trim());
 }
