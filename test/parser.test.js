@@ -179,3 +179,41 @@ test('malformed times and days are errors, assignments unresolved', async () => 
 test('garbage bytes are rejected by the parser', async () => {
   await assert.rejects(parse(Buffer.from('PK not really a zip')));
 });
+
+async function mergedShiftWorkbook({ mergeNames }) {
+  const ExcelJS = (await import('exceljs')).default;
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('a');
+  ws.getCell('A1').value = 'שמירה';
+  ['יום', 'שעות', 'שומר'].forEach((h, i) => (ws.getCell(2, i + 1).value = h));
+  ws.getCell('A3').value = 'ראשון 11/10';
+  ws.mergeCells('A3:A8');
+  ws.getCell('B3').value = '06:00-14:00';
+  ws.mergeCells('B3:B5');
+  ws.getCell('B6').value = '14:00-22:00';
+  ws.mergeCells('B6:B8');
+  if (mergeNames) {
+    ws.getCell('C3').value = 'דני דמה';
+    ws.mergeCells('C3:C5');
+    ws.getCell('C6').value = 'משה דמה';
+    ws.mergeCells('C6:C8');
+  } else {
+    ['דני דמה', 'משה דמה', 'רון דמה', 'גיל דמה', 'טל דמה', 'עדי דמה'].forEach((n, i) => (ws.getCell(3 + i, 3).value = n));
+  }
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}
+
+test('a name merged over the rows of one merged time cell is one shift', async () => {
+  const r = await parse(await mergedShiftWorkbook({ mergeNames: true }));
+  assert.deepEqual(find(r, 'דני דמה').map((a) => [a.start.time, a.end.time]), [['06:00', '14:00']]);
+  assert.deepEqual(find(r, 'משה דמה').map((a) => [a.start.time, a.end.time]), [['14:00', '22:00']]);
+  assert.ok(!codes(r).includes('DUPLICATE'));
+  assert.equal(r.summary.assignments, 2);
+});
+
+test('different names in the rows of one merged time cell each get that shift', async () => {
+  const r = await parse(await mergedShiftWorkbook({ mergeNames: false }));
+  assert.equal(r.summary.assignments, 6);
+  assert.deepEqual(find(r, 'רון דמה').map((a) => [a.start.time, a.end.time]), [['06:00', '14:00']]);
+  assert.deepEqual(find(r, 'גיל דמה').map((a) => [a.start.time, a.end.time]), [['14:00', '22:00']]);
+});

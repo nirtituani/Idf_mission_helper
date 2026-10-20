@@ -159,6 +159,16 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
         return { position: row.task.text, positionKey: addPosition(section, row.task.text) };
       };
 
+      // A name cell merged down several rows repeats its text on each row; with the same post and
+      // hours (e.g. a merged time cell too) it is one shift, not one per row.
+      const mergedShifts = new Set();
+      const isMergedRepeat = (person, positionKey, interval) => {
+        const key = `${person.masterAddr || person.addr}|${positionKey}|${interval?.startKey}|${interval?.endKey}`;
+        const seen = mergedShifts.has(key);
+        mergedShifts.add(key);
+        return Boolean(person.masterAddr) && seen;
+      };
+
       if (block.kind === 'range') {
         let prevEndKey = null;
         for (const row of block.rows) {
@@ -193,6 +203,7 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
               if (interval) slots.push(makeSlot(block, section, position, positionKey, person, interval, row));
               continue;
             }
+            if (isMergedRepeat(person, positionKey, interval)) continue;
             rowAssignments.push(...addCell(base(row, person), position, positionKey, person, interval ? 'timed' : 'unresolved', interval));
           }
           if (!interval && row.range.text) {
@@ -296,6 +307,7 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
             addIssue('info', 'MISSING_TASK', `"${person.text}" רשום ללא משימה — לא נכלל בשיבוץ.`, [ref(block.sheet, person.addr)]);
             continue;
           }
+          if (isMergedRepeat(person, positionKey, interval)) continue;
           addCell(base(row, person), position, positionKey, person, rowKind, interval);
         }
       }
