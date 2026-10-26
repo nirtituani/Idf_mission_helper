@@ -112,3 +112,12 @@ test('problems box: overlaps are listed, notes/merges are not', () => {
   assert.ok(!/אוחדו|דומים|משבצות ריקות|כולל 2 חיילים/.test(text));
   assert.ok(!/נתונים שלא נקראו/.test(text)); // no read errors in this file
 });
+
+test('workload card: long day and short rest in their own card, not in the problems box', () => {
+  assert.equal($('workload').hidden, false);
+  const text = $('workload-body').textContent;
+  assert.match(text, /יותר מ־12 שעות בתוך 24 שעות \(1\)/);
+  assert.match(text, /פחות מ־8 שעות מנוחה בין משימות \(1\)/);
+  assert.match(text, /"נווה דמה" משובץ ל־16 שעות בתוך 24 שעות/);
+  assert.ok(!/נווה דמה/.test($('issues-body').textContent));
+});

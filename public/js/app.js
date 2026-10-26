@@ -80,6 +80,7 @@ function setRoster(roster) {
   if (!roster) {
     $('summary').hidden = true;
     $('issues').hidden = true;
+    $('workload').hidden = true;
     $('active-file').hidden = true;
     $('search-form').hidden = true;
     $('search-empty').hidden = false;
@@ -201,10 +202,16 @@ const PROBLEM_GROUPS = [
   { test: (i) => i.code === 'OVERLAP' || i.code === 'DUPLICATE', title: 'חייל משובץ פעמיים באותו זמן' },
 ];
 
-function renderIssues() {
-  const groups = PROBLEM_GROUPS.map((g) => ({ ...g, list: state.roster.issues.filter(g.test) })).filter((g) => g.list.length);
-  $('issues').hidden = groups.length === 0;
-  $('issues-body').replaceChildren(
+// Workload warnings: shown in their own card, styled apart from the problems above.
+const WORKLOAD_GROUPS = [
+  { test: (i) => i.code === 'LONG_DAY', title: 'יותר מ־12 שעות בתוך 24 שעות' },
+  { test: (i) => i.code === 'SHORT_REST', title: 'פחות מ־8 שעות מנוחה בין משימות' },
+];
+
+function renderIssueGroups(card, body, defs) {
+  const groups = defs.map((g) => ({ ...g, list: state.roster.issues.filter(g.test) })).filter((g) => g.list.length);
+  $(card).hidden = groups.length === 0;
+  $(body).replaceChildren(
     ...groups.flatMap((g) => [
       el('h3', { class: 'problem-title' }, `${g.title} (${g.list.length})`),
       el(
@@ -218,6 +225,11 @@ function renderIssues() {
       ),
     ]),
   );
+}
+
+function renderIssues() {
+  renderIssueGroups('issues', 'issues-body', PROBLEM_GROUPS);
+  renderIssueGroups('workload', 'workload-body', WORKLOAD_GROUPS);
 }
 
 // ---------- Search form ----------

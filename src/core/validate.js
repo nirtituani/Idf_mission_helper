@@ -36,6 +36,46 @@ export function validateRoster(roster) {
     }
   }
 
+  // Workload (by request): more than 12 hours of shifts within any 24 hours, and less than 8 hours of
+  // rest between shifts. Tasks longer than 12 hours (kitchen, a 24h standby, a multi-day post) are
+  // long by nature and not counted. Overlaps are already reported above.
+  for (const all of bySoldier.values()) {
+    const list = all.filter((a) => a.endKey - a.startKey <= MAX_COUNTED_SHIFT);
+    for (let i = 0; i < list.length; ) {
+      const from = list[i].startKey;
+      const to = from + DAY;
+      const inWindow = list.filter((b) => b.startKey < to && b.endKey > from);
+      const minutes = inWindow.reduce((n, b) => n + Math.min(b.endKey, to) - Math.max(b.startKey, from), 0);
+      if (minutes <= MAX_IN_DAY) {
+        i++;
+        continue;
+      }
+      add(
+        'warning',
+        'LONG_DAY',
+        `"${list[i].person}" משובץ ל־${hours(minutes)} שעות בתוך 24 שעות: ${inWindow.map(describe).join(', ')}.`,
+        inWindow.map(cellOf),
+        inWindow.map((b) => b.id),
+      );
+      while (i < list.length && list[i].startKey < to) i++;
+    }
+    // For rest, a whole-day task (kitchen) is worked 06:00–22:00 of its date (by request).
+    const rests = [
+      ...list.map((a) => ({ a, start: a.startKey, end: a.endKey })),
+      ...all.filter((a) => a.allDay).map((a) => ({ a, start: a.startKey + WHOLE_DAY_FROM, end: a.startKey + WHOLE_DAY_TO })),
+    ].sort((x, y) => x.start - y.start);
+    let last = null; // the task that ends latest so far
+    for (const cur of rests) {
+      const rest = last ? cur.start - last.end : -1;
+      if (rest >= 0 && rest < MIN_REST) {
+        const [a, b] = [last.a, cur.a];
+        const what = rest === 0 ? 'ללא מנוחה' : `רק ${hours(rest)} שעות מנוחה`;
+        add('warning', 'SHORT_REST', `"${a.person}" — ${what} בין ${describe(a)} ל־${describe(b)}.`, [cellOf(a), cellOf(b)], [a.id, b.id]);
+      }
+      if (!last || cur.end > last.end) last = cur;
+    }
+  }
+
   // Cells that look like more than one plain name.
   for (const a of assignments) {
     if (hasNameAnnotation(a.soldier) && !isUnitName(a.soldier)) {
@@ -89,6 +129,14 @@ export function validateRoster(roster) {
 
   return roster;
 }
+
+const DAY = 24 * 60;
+const MAX_IN_DAY = 12 * 60;
+const MAX_COUNTED_SHIFT = 12 * 60;
+const MIN_REST = 8 * 60;
+const WHOLE_DAY_FROM = 6 * 60;
+const WHOLE_DAY_TO = 22 * 60;
+const hours = (min) => String(Math.round((min / 60) * 10) / 10);
 
 function describe(a) {
   const dm = (iso) => `${iso.slice(8)}/${iso.slice(5, 7)}`;

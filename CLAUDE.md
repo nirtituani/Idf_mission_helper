@@ -48,6 +48,10 @@ user's machine.
 - Shifts starting 00:00–06:00 (ending ≤ 08:00) get the label "בין יום X ל־Y" (night between the
   previous day and this day). Dates are NOT shifted.
 - Ignore the availability list (א.ב.ג.ד…) next to names.
+- Workload warnings (separate "עומס על חיילים" card, warnings only, never block sending): more than 12h
+  of shifts in any 24h (LONG_DAY) and under 8h rest between tasks (SHORT_REST). Tasks over 12h are not
+  counted; a whole-day task (kitchen) counts as 06:00–22:00 for rest only.
+- A name cell merged down several rows of the same post/hours is one shift.
 - On screen, show only "בעיות בשיבוץ": read errors + a soldier's double bookings. Name merges, notes
   and similar info are not shown.
 - In Hebrew text, write time ranges with "עד" (not a dash — RTL bidi flips it); in HTML wrap times in
