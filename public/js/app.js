@@ -139,25 +139,6 @@ function renderSummary() {
 function renderWeekStart() {
   const r = state.roster;
   const box = $('week-start');
-  // Several tabs = several weeks: one line per tab; the picker only fills tabs with no date.
-  if (r.weekStarts?.length > 1) {
-    const missing = r.weekStarts.filter((w) => !w.date || w.source === 'user');
-    const lines = r.weekStarts.map((w) =>
-      el('li', {}, el('strong', {}, w.sheet), ': ', w.date ? `שבוע מ${formatLong(w.date)}${w.source === 'workbook' ? ` (זוהה מ־${w.cell.split('!')[1]})` : ' (נקבע ידנית)'}` : 'לא נמצא תאריך — יש לבחור תחילת שבוע'),
-    );
-    const parts = [el('p', {}, `בקובץ ${r.weekStarts.length} לשוניות — כל לשונית היא שבוע נפרד:`), el('ul', { class: 'plain' }, ...lines)];
-    weekPicker?.destroy();
-    weekPicker = null;
-    if (missing.length) {
-      const pickerHost = el('div');
-      parts.push(el('div', { class: 'week-controls' }, pickerHost));
-      box.replaceChildren(...parts);
-      weekPicker = new DatePicker(pickerHost, { value: missing[0].date || todayIso(), today: todayIso(), label: 'תאריך תחילת שבוע', onChange: (iso) => changeWeekStart(iso) });
-    } else {
-      box.replaceChildren(...parts);
-    }
-    return;
-  }
   const ws = r.weekStart;
   const line = el('p');
   if (!ws) {
@@ -177,7 +158,10 @@ function renderWeekStart() {
     controls.append(reset);
   }
   weekPicker?.destroy();
-  box.replaceChildren(line, controls);
+  // Several week tabs: only the newest one is read — say which.
+  const tabs = (r.sheets ?? []).filter((x) => !x.hidden && x.tables > 0);
+  const tabsLine = tabs.length > 1 && r.usedSheet ? [el('p', { class: 'muted' }, `בקובץ ${tabs.length} לשוניות — מוצגת רק הלשונית של השבוע האחרון: "${r.usedSheet}".`)] : [];
+  box.replaceChildren(...tabsLine, line, controls);
   weekPicker = new DatePicker(pickerHost, {
     value: ws?.date || todayIso(),
     today: todayIso(),

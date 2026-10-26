@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
 import { parseRoster } from '../src/core/index.js';
-import { buildMainFixture, buildSecondFixture } from './fixtures/build.js';
+import { buildMainFixture, buildSecondFixture, buildTwoWeekFixture } from './fixtures/build.js';
 
 const html = fs.readFileSync(path.join(import.meta.dirname, '..', 'public', 'index.html'), 'utf8');
 const dom = new JSDOM(html.replace(/<script[^>]*><\/script>/, ''), { url: 'http://localhost/' });
@@ -91,7 +91,8 @@ test('days with roster data are marked', () => {
 test('search form: 24 hours, post options only from the roster, replaced on new upload', async () => {
   const r1 = await parseRoster(await buildMainFixture(), { fileName: 'a.xlsx', today: '2026-10-17' });
   const r2 = await parseRoster(await buildSecondFixture(), { fileName: 'b.xlsx', today: '2026-10-17' });
-  const responses = [r1, r2];
+  const r3 = await parseRoster(await buildTwoWeekFixture(), { fileName: 'c.xlsx', today: '2026-10-18' });
+  const responses = [r1, r2, r3];
   let searchBody = null;
   globalThis.fetch = async (url, opts = {}) => {
     const json = (status, body) => ({ ok: status < 400, status, json: async () => body });
@@ -144,6 +145,10 @@ test('search form: 24 hours, post options only from the roster, replaced on new 
   assert.ok(!postTexts().some((t) => t.includes('סטטיות')));
   assert.equal(document.getElementById('post').value, 'all');
   assert.equal(document.getElementById('results').textContent, '');
+  assert.ok(!/לשוניות/.test(document.getElementById('week-start').textContent)); // one tab: no tab line
+
+  await upload('c.xlsx');
+  assert.match(document.getElementById('week-start').textContent, /בקובץ 2 לשוניות — מוצגת רק הלשונית של השבוע האחרון: "שבוע 2"/);
 });
 
 const tick = () => new Promise((r) => setTimeout(r, 20));

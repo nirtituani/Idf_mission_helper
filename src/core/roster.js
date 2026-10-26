@@ -41,29 +41,7 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
   const ref = (sheet, addr) => `${sheet}!${addr}`;
 
   // ---- 1. Week start from explicit dates -------------------------------------------------
-  const detectedBySheet = new Map();
-  for (const { blocks } of sheetResults) {
-    for (const block of blocks) {
-      for (const row of block.rows) {
-        const candidates = [];
-        if (row.day?.text && !row.day.masterAddr) {
-          const p = parseDayLabel(row.day.text);
-          if (p?.day) candidates.push({ p, text: row.day.text, addr: row.day.addr });
-        }
-        if (row.range?.text) {
-          const rg = parseRangeText(row.range.text);
-          if (rg) candidates.push({ p: rg.from, text: row.range.text, addr: row.range.addr });
-        }
-        for (const c of candidates) {
-          const iso = resolveYear(c.p, today);
-          const prev = detectedBySheet.get(block.sheet);
-          if (iso && (!prev || iso < prev.firstDate)) {
-            detectedBySheet.set(block.sheet, { firstDate: iso, cell: ref(block.sheet, c.addr), text: c.text });
-          }
-        }
-      }
-    }
-  }
+  const detectedBySheet = detectFirstDates(sheetResults, today);
   const usedSheets = sheetResults.filter((s) => s.blocks.length).map((s) => s.sheet);
   const multiSheet = usedSheets.length > 1;
   const weekStarts = usedSheets.map((sheet) => {
@@ -373,6 +351,35 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
     slots,
     issues,
   };
+}
+
+// sheet name → { firstDate, cell, text }: the earliest explicit date in each sheet.
+export function detectFirstDates(sheetResults, today) {
+  const ref = (sheet, addr) => `${sheet}!${addr}`;
+  const detectedBySheet = new Map();
+  for (const { blocks } of sheetResults) {
+    for (const block of blocks) {
+      for (const row of block.rows) {
+        const candidates = [];
+        if (row.day?.text && !row.day.masterAddr) {
+          const p = parseDayLabel(row.day.text);
+          if (p?.day) candidates.push({ p, text: row.day.text, addr: row.day.addr });
+        }
+        if (row.range?.text) {
+          const rg = parseRangeText(row.range.text);
+          if (rg) candidates.push({ p: rg.from, text: row.range.text, addr: row.range.addr });
+        }
+        for (const c of candidates) {
+          const iso = resolveYear(c.p, today);
+          const prev = detectedBySheet.get(block.sheet);
+          if (iso && (!prev || iso < prev.firstDate)) {
+            detectedBySheet.set(block.sheet, { firstDate: iso, cell: ref(block.sheet, c.addr), text: c.text });
+          }
+        }
+      }
+    }
+  }
+  return detectedBySheet;
 }
 
 function makeAssignment(list, base, position, positionKey, name, kind, interval) {

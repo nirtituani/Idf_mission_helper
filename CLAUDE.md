@@ -37,8 +37,9 @@ user's machine.
   second ("20:00 - 20:00" = 24h).
 - A row with day names only ("שלישי עד ראשון") continues from the previous row's end and ends on the
   named day at the same hour.
-- Week start is per tab (Sunday on/before the earliest explicit date in the tab). Multi-tab files:
-  the newer tab wins where the same post/time overlaps. The user usually uploads only the current tab.
+- Week start = Sunday on/before the earliest explicit date in the tab. Multi-tab files (a new tab per
+  week): only the newest week's tab is read (latest date; no dated tab → the last tab); the page says
+  which tab is shown. (`buildRoster` can still merge tabs — newer wins — but `parseRoster` passes one.)
 - Cell "א/ב" = shift for both soldiers; "(…)" = note.
 - Near-identical spellings are the same soldier (punctuation/spaces/`*`, doubled ו/י, one-letter or
   swapped-letter difference in the last name with the same first name); a short form merges only if it
