@@ -442,3 +442,34 @@ test('privacy page is served (with and without .html), standalone, with the oper
   }
   assert.ok(document.querySelector('footer a[href="/privacy"]'));
 });
+
+test('"select changed" picks soldiers whose message changed, not yet sent or failed — not unchanged ones', async () => {
+  const rec = (status, changed) => ({ status, error: null, sentAt: '2026-10-18T09:00:00.000Z', changed });
+  const sentOk = Object.fromEntries(roster.soldiers.map((s) => [s.key, { send: rec('delivered', false) }]));
+  await load(stateFor({ soldiers: {
+    ...sentOk,
+    [keyOf('נוי דמה')]: { send: rec('read', true) },
+    [keyOf('עדי דמה')]: { send: rec('failed', false) },
+    [keyOf('פז דמה')]: { send: null },
+    [keyOf('תום דמה')]: { send: rec('sending', true) },
+  } }));
+  const btn = $('select-changed');
+  assert.equal(btn.hidden, false);
+  assert.equal(btn.textContent, 'בחירת מי שהשתנה או טרם קיבל (3)');
+  pick('אורי דמה');
+  click(btn);
+  const picked = [...document.querySelectorAll('#soldier-list .soldier')].filter((li) => li.querySelector('input').checked).map((li) => li.querySelector('.soldier-name').textContent);
+  assert.deepEqual(picked.sort(), ['נוי דמה', 'עדי דמה', 'פז דמה'].sort());
+  click($('send-selected'));
+  assert.match($('send-confirm').textContent, /נוי דמה — נקרא ✓✓ · השתנה מאז השליחה/);
+});
+
+test('"select changed" is hidden without the access code and disabled when nothing changed', async () => {
+  await load({ enabled: true, authorized: false });
+  assert.equal($('select-changed').hidden, true);
+  const rec = { status: 'delivered', error: null, sentAt: '2026-10-18T09:00:00.000Z', changed: false };
+  await load(stateFor({ soldiers: Object.fromEntries(roster.soldiers.map((s) => [s.key, { send: rec }])) }));
+  assert.equal($('select-changed').hidden, false);
+  assert.equal($('select-changed').disabled, true);
+  assert.equal($('select-changed').textContent, 'בחירת מי שהשתנה או טרם קיבל (0)');
+});

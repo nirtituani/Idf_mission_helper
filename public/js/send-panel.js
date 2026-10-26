@@ -267,7 +267,7 @@ export function createSendPanel({
       parts.push(
         el('p', { class: 'status status-warn' }, `מתוך הנבחרים: ${facts.join(', ')}. הם לא יקבלו הודעה אלא אם תסמנו את התיבה.`),
         el('ul', { class: 'plain small' },
-          ...[...already, ...sending].map((k) => el('li', {}, `${nameOf(k)} — ${SEND_LABEL[entry(k).send.status] ?? 'נשלח'}`)),
+          ...[...already, ...sending].map((k) => el('li', {}, `${nameOf(k)} — ${SEND_LABEL[entry(k).send.status] ?? 'נשלח'}${entry(k).send.changed ? ' · השתנה מאז השליחה' : ''}`)),
           ...failed.map((k) => el('li', {}, `${nameOf(k)} — נכשל: ${entry(k).send.error || 'סיבה לא ידועה'}`))),
       );
       resend = el('input', { type: 'checkbox', id: 'send-resend' });

@@ -21,6 +21,12 @@ export function createSoldiersView({ api, onStale, pollMs, now }) {
     const st = sendState.get(s.key);
     return st ? st.sendable && st.contact === 'ok' : !s.ambiguous && s.timedCount > 0;
   };
+  // After a roster change: whose message differs from what was sent, or who has none yet this week
+  // (never sent, or the last send failed). Soldiers still being sent to are left out.
+  const needsSend = (s) => {
+    const rec = sendState.get(s.key)?.send;
+    return !rec || rec.status === 'failed' || (rec.changed && rec.status !== 'sending');
+  };
   const selectedKeys = () => (roster ? roster.soldiers.filter((s) => selected.has(s.key)).map((s) => s.key) : []);
 
   const panel = createSendPanel({
@@ -151,6 +157,11 @@ export function createSoldiersView({ api, onStale, pollMs, now }) {
     const what = sendState.size ? 'שניתן לשלוח להם' : 'שניתן להכין להם הודעה';
     $('selected-count').textContent = `נבחרו ${selected.size} מתוך ${roster.soldiers.filter(eligible).length} חיילים ${what}`;
     $('preview-selected').disabled = selected.size === 0;
+    const changed = $('select-changed');
+    const toSend = shownEligible.filter(needsSend).length;
+    changed.hidden = sendState.size === 0;
+    changed.disabled = toSend === 0;
+    changed.textContent = `בחירת מי שהשתנה או טרם קיבל (${toSend})`;
     panel.selectionChanged();
   }
 
@@ -160,6 +171,12 @@ export function createSoldiersView({ api, onStale, pollMs, now }) {
       if (e.target.checked) selected.add(s.key);
       else selected.delete(s.key);
     }
+    renderList();
+  });
+
+  $('select-changed').addEventListener('click', () => {
+    selected.clear();
+    for (const s of visible().filter(eligible).filter(needsSend)) selected.add(s.key);
     renderList();
   });
 
