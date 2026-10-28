@@ -121,3 +121,38 @@ test('workload card: long day and short rest in their own card, not in the probl
   assert.match(text, /"נווה דמה" משובץ ל־16 שעות בתוך 24 שעות/);
   assert.ok(!/נווה דמה/.test($('issues-body').textContent));
 });
+
+test('"הצגה בקובץ" on an overlap opens the file tab and marks both of the soldier\'s cells', () => {
+  const li = [...$('issues-body').querySelectorAll('li')].find((x) => /גדי דמה/.test(x.textContent));
+  click(li.querySelector('.show-in-file'));
+  assert.equal($('tab-file').getAttribute('aria-selected'), 'true');
+  assert.equal($('view-file').hidden, false);
+  const marked = [...$('file-grid').querySelectorAll('td.hl')];
+  assert.equal(marked.length, 2);
+  for (const td of marked) assert.match(td.textContent, /גדי דמה/);
+  assert.equal($('file-grid').querySelectorAll('td.hl-at').length, 1);
+  assert.ok($('file-grid').querySelectorAll('td.hl-ctx').length >= 1); // the rows' hours/day cells
+  assert.match($('file-message').textContent, /גדי דמה/);
+  assert.match($('file-pos').textContent, /תא 1 מתוך 2/);
+  click($('file-next'));
+  assert.match($('file-pos').textContent, /תא 2 מתוך 2/);
+  click($('file-clear'));
+  assert.equal($('file-grid').querySelectorAll('.hl, .hl-ctx').length, 0);
+  assert.equal($('file-focus').hidden, true);
+});
+
+test('the file tab shows the sheet with merged cells, and any cell chip jumps to its cell', () => {
+  assert.ok($('file-grid').querySelector('td[colspan]')); // a merged table title
+  assert.ok($('file-grid').querySelector('td[rowspan]')); // a merged day cell
+  click($('tab-soldiers'));
+  const a = roster.assignments.find((x) => x.kind === 'timed');
+  const chip = document.createElement('div');
+  chip.innerHTML = `<code class="cell" data-ref="${a.source.sheet}!${a.source.cell}">x</code>`;
+  $('soldier-list').append(chip);
+  click(chip.firstChild);
+  chip.remove();
+  assert.equal($('tab-file').getAttribute('aria-selected'), 'true');
+  const marked = $('file-grid').querySelectorAll('td.hl');
+  assert.equal(marked.length, 1);
+  assert.match(marked[0].textContent, new RegExp(a.soldier.slice(0, 3)));
+});

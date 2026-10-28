@@ -44,7 +44,7 @@ export function shiftNode(x) {
 // "שיבוץ!C39" → sheet name in RTL, cell address isolated as LTR (avoids bidi scrambling).
 export function cellChip(ref) {
   const i = ref.lastIndexOf('!');
-  const chip = el('code', { class: 'cell' });
+  const chip = el('code', { class: 'cell', role: 'button', tabindex: '0', title: 'הצגה בקובץ', 'data-ref': ref });
   if (i > 0) chip.append(`${ref.slice(0, i)} · `);
   chip.append(ltr(i > 0 ? ref.slice(i + 1) : ref));
   return chip;

@@ -62,7 +62,26 @@
       <button type="button" role="tab" id="tab-shifts" aria-selected="false" aria-controls="view-shifts" tabindex="-1">חיפוש משמרות</button>
       <button type="button" role="tab" id="tab-soldiers" aria-selected="false" aria-controls="view-soldiers" tabindex="-1">לפי חייל</button>
       <button type="button" role="tab" id="tab-week" aria-selected="false" aria-controls="view-week" tabindex="-1">לוח שבועי</button>
+      <button type="button" role="tab" id="tab-file" aria-selected="false" aria-controls="view-file" tabindex="-1">הקובץ</button>
     </div>
+
+    <section id="view-file" class="card" role="tabpanel" aria-labelledby="tab-file" hidden>
+      <h2>הקובץ</h2>
+      <p id="file-empty" class="empty">יש להעלות קובץ שיבוץ כדי לראות אותו כאן.</p>
+      <div id="file-body" hidden>
+        <p class="muted small"><span id="file-sheet"></span> — כפי שהועלתה. לחיצה על "הצגה בקובץ" ליד בעיה או אזהרה, או על כתובת תא, מסמנת כאן את התאים.</p>
+        <div id="file-focus" class="file-focus" role="status" aria-live="polite" hidden>
+          <p id="file-message"></p>
+          <div class="row-actions">
+            <button id="file-prev" type="button" class="btn">› הקודם</button>
+            <span id="file-pos" class="muted small"></span>
+            <button id="file-next" type="button" class="btn">הבא ‹</button>
+            <button id="file-clear" type="button" class="btn">ניקוי הסימון</button>
+          </div>
+        </div>
+        <div id="file-grid" class="sheet-wrap"></div>
+      </div>
+    </section>
 
     <section id="view-week" class="card" role="tabpanel" aria-labelledby="tab-week" hidden>
       <h2>לוח שבועי</h2>

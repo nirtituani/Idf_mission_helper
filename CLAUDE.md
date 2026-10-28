@@ -20,7 +20,8 @@ user's machine.
 ## Layout
 - `src/core/` — parsing and logic (pure, tested): `workbook` (ExcelJS → grids), `blocks` (find tables),
   `roster` (build assignments), `validate`, `people` (name identity), `soldiers`, `messages`,
-  `search`, `shifts`, `week`, `dates`, `filters`, `text`. `index.js` → `parseRoster()`.
+  `search`, `shifts`, `week`, `dates`, `filters`, `text`, `grid` (the used tab as text + merges + fill
+  colours for the "הקובץ" tab; issues and cell chips jump there and mark their cells). `index.js` → `parseRoster()`.
 - `server/` — Express app; sessions in memory only (HttpOnly cookie, 8h idle / 24h max, cap 40),
   rate limits, CSP. Rosters never touch disk.
 - `public/` — vanilla JS UI, self-hosted fonts. Some core modules are served to the browser via an

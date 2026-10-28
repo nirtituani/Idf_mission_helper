@@ -231,6 +231,9 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--signal);
 .problem-list { margin: 0; padding-inline-start: 20px; }
 .problem-list li { margin: 6px 0; }
 .cells { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-inline-start: 6px; }
+code.cell { cursor: pointer; }
+code.cell:hover { outline: 1px solid var(--olive); }
+.btn-small { padding: 3px 9px; font-size: .8rem; }
 code.cell { unicode-bidi: isolate; white-space: nowrap; font-size: .76rem; background: var(--olive-soft); color: var(--ink); padding: 1px 6px; border-radius: 3px; }
 .muted { color: var(--muted); }
 .small { font-size: .8rem; }
@@ -446,3 +449,22 @@ button.entry:hover { transform: translateY(-1px); box-shadow: 0 4px 10px -6px rg
   .board-pos { font-size: .78rem; }
   table.board { min-width: 840px; }
 }
+
+/* ---------- The file as uploaded ---------- */
+/* A spreadsheet look in both themes: the file's own fill colours assume a light sheet. */
+.sheet-wrap { overflow: auto; max-height: 70vh; border: 1px solid var(--line-strong); border-radius: 4px; background: #fff; }
+table.sheet { border-collapse: collapse; font-size: .8rem; color: #1c2019; background: #fff; }
+table.sheet td, table.sheet th { border: 1px solid #d9d9d9; padding: 3px 6px; white-space: pre-wrap; min-width: 48px; max-width: 220px; vertical-align: middle; text-align: center; }
+table.sheet td { background: var(--fill, #fff); }
+table.sheet td.b { font-weight: 700; }
+table.sheet td.nw { white-space: nowrap; }
+table.sheet thead th { position: sticky; top: 0; z-index: 2; background: #eef0ea; color: #555; font-weight: 600; font-family: var(--mono); }
+table.sheet tbody th { position: sticky; right: 0; z-index: 1; background: #eef0ea; color: #555; font-weight: 600; font-family: var(--mono); min-width: 32px; }
+table.sheet .sheet-corner { right: 0; z-index: 3; }
+table.sheet td.hl-ctx { box-shadow: inset 0 0 0 2px #3d4f8c; }
+table.sheet td.hl { box-shadow: inset 0 0 0 3px #b3261e; background: color-mix(in srgb, var(--fill, #fff) 55%, #ffd54f); font-weight: 700; }
+table.sheet td.hl-at { box-shadow: inset 0 0 0 4px #b3261e, 0 0 0 3px #ffd54f; position: relative; z-index: 1; }
+.file-focus { border-inline-start: 4px solid var(--warn); background: var(--warn-bg); color: var(--ink); padding: 8px 12px; border-radius: 4px; margin: 0 0 10px; }
+.file-focus[hidden] { display: none; }
+.file-focus p { margin: 0 0 6px; }
+.file-focus .row-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

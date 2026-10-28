@@ -7,6 +7,7 @@ import { validateRoster } from './validate.js';
 import { buildPostOptions, rosterDateRange } from './search.js';
 import { groupBySoldier } from './soldiers.js';
 import { isUnitName } from './people.js';
+import { sheetGrid } from './grid.js';
 
 export async function parseRoster(buffer, { fileName, today, weekStartOverride = null }) {
   const sheets = await readWorkbook(buffer);
@@ -24,6 +25,7 @@ export async function parseRoster(buffer, { fileName, today, weekStartOverride =
     fileName,
     sheets: sheetResults.map((s) => ({ name: s.sheet, hidden: s.hidden, tables: s.blocks.length, ignored: s.sheet !== usedSheet })),
     usedSheet,
+    grid: sheetGrid(sheets.find((s) => s.name === usedSheet)),
     weekStart: roster.weekStart,
     weekStarts: roster.weekStarts,
     detectedWeekStart: roster.detectedWeekStart,

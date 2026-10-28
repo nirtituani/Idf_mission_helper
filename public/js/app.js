@@ -2,6 +2,7 @@ import { DatePicker, formatLong } from './datepicker.js';
 import { createSoldiersView } from './soldiers-view.js';
 import { createWeekView } from './week-view.js';
 import { createShiftsView } from './shifts-view.js';
+import { createFileView } from './file-view.js';
 import { assignmentTable, cellChip, dayMonth, el, fillPostSelect, ltr, shiftNode, shortDate } from './ui.js';
 import { addDays, dayNumber, formatMinutes, todayIso } from '/core/dates.js';
 
@@ -87,6 +88,7 @@ function setRoster(roster) {
     soldiersView.setRoster(null);
     weekView.setRoster(null);
     shiftsView.setRoster(null);
+    fileView.setRoster(null);
     return;
   }
   for (const issue of roster.issues) {
@@ -101,6 +103,7 @@ function setRoster(roster) {
   soldiersView.setRoster(roster);
   weekView.setRoster(roster);
   shiftsView.setRoster(roster);
+  fileView.setRoster(roster);
 }
 
 function rosterDates(roster) {
@@ -204,12 +207,41 @@ function renderIssueGroups(card, body, defs) {
         ...g.list.map((i) => {
           const li = el('li', {}, el('span', {}, i.message));
           if (i.cells.length) li.append(el('span', { class: 'cells' }, ...i.cells.slice(0, 8).map((c) => cellChip(c))));
+          if (i.cells.length && state.roster.grid) {
+            const btn = el('button', { type: 'button', class: 'btn btn-small show-in-file' }, 'הצגה בקובץ');
+            btn.addEventListener('click', () => showInFile(i));
+            li.append(' ', btn);
+          }
           return li;
         }),
       ),
     ]),
   );
 }
+
+// The issue's cells, plus the day and hours cells of the rows it is about.
+function showInFile(issue) {
+  const byId = new Map(state.roster.assignments.map((a) => [a.id, a]));
+  const context = issue.assignmentIds
+    .map((id) => byId.get(id))
+    .filter(Boolean)
+    .flatMap((a) => [a.source.time, a.source.day].filter(Boolean).map((c) => `${a.source.sheet}!${c}`));
+  showTab($('tab-file'));
+  fileView.show({ message: issue.message, cells: issue.cells, context });
+}
+
+// Any cell address chip on the page opens the file at that cell.
+function onChip(e) {
+  const chip = e.target.closest?.('code.cell');
+  if (!chip || !state.roster?.grid || chip.closest('#view-file')) return;
+  if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
+  e.preventDefault();
+  showTab($('tab-file'));
+  const ref = chip.dataset.ref;
+  fileView.show({ message: `תא ${ref.slice(ref.lastIndexOf('!') + 1)}`, cells: [ref] });
+}
+document.addEventListener('click', onChip);
+document.addEventListener('keydown', onChip);
 
 function renderIssues() {
   renderIssueGroups('issues', 'issues-body', PROBLEM_GROUPS);
@@ -319,6 +351,7 @@ async function loadExisting() {
 const tabs = [...document.querySelectorAll('#tabs [role="tab"]')];
 const soldiersView = createSoldiersView({ api, onStale: loadExisting });
 const shiftsView = createShiftsView();
+const fileView = createFileView();
 const weekView = createWeekView({
   onShowSoldier: (personKey) => {
     showTab($('tab-soldiers'));
