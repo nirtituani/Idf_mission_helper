@@ -217,3 +217,35 @@ test('different names in the rows of one merged time cell each get that shift', 
   assert.deepEqual(find(r, 'רון דמה').map((a) => [a.start.time, a.end.time]), [['06:00', '14:00']]);
   assert.deepEqual(find(r, 'גיל דמה').map((a) => [a.start.time, a.end.time]), [['14:00', '22:00']]);
 });
+
+test('date range written without a space before/after "עד" ("17:00עד") is read', async () => {
+  const { parseRangeText } = await import('../src/core/roster.js');
+  const want = { from: { weekday: 1, day: 26, month: 10, minutes: 1020 }, to: { weekday: 4, day: 29, month: 10, minutes: 1020 } };
+  for (const t of ['שני 26.10 17:00עד חמישי 29.10 17:00', 'שני 26.10 17:00 עדחמישי 29.10 17:00', 'שני 26.10 17:00 עד חמישי 29.10 17:00']) {
+    assert.deepEqual(parseRangeText(t), want, t);
+  }
+  assert.equal(parseRangeText('שני 26.10 17:00עדכון'), null); // a word that merely starts with עד is not a separator
+});
+
+test('a range row with a start date but no start hour continues from the row above when it ended that day', async () => {
+  const { default: ExcelJS } = await import('exceljs');
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('שיבוץ');
+  ws.getCell('A1').value = 'מוצב';
+  ws.mergeCells('A1:C1');
+  ['מתאריך – עד', 'מפקד', 'לוחם 1'].forEach((h, i) => (ws.getCell(2, i + 1).value = h));
+  ws.getCell('A3').value = 'שני 26.10 17:00עד חמישי 29.10 17:00';
+  ws.getCell('B3').value = 'אבי דמה';
+  ws.getCell('A4').value = 'חמישי 29.10 עד ראשון 1.11 17:00';
+  ws.getCell('B4').value = 'בני דמה';
+  ws.getCell('A5').value = 'שני 2.11 עד רביעי 4.11 17:00'; // previous row ended 1/11 — not the same day
+  ws.getCell('B5').value = 'גל דמה';
+  const r = await parseRoster(await wb.xlsx.writeBuffer(), { fileName: 'f.xlsx', today: '2026-10-28' });
+  const [a] = find(r, 'אבי דמה');
+  assert.deepEqual([a.kind, a.start, a.end], ['timed', { date: '2026-10-26', time: '17:00' }, { date: '2026-10-29', time: '17:00' }]);
+  const [b] = find(r, 'בני דמה');
+  assert.deepEqual([b.kind, b.start, b.end], ['timed', { date: '2026-10-29', time: '17:00' }, { date: '2026-11-01', time: '17:00' }]);
+  assert.ok(r.issues.some((i) => i.code === 'RANGE_INFERRED' && i.message.includes('29/10 17:00 עד 01/11 17:00')));
+  const [g] = find(r, 'גל דמה');
+  assert.equal(g.kind, 'unresolved'); // never guessed
+});

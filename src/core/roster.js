@@ -155,10 +155,21 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
           if (rg) {
             const fromDate = resolveYear(rg.from, yearRef);
             const toDate = resolveYear(rg.to, yearRef);
-            if (fromDate && toDate) {
-              const startKey = minuteKey(fromDate, rg.from.minutes);
+            // No start hour ("חמישי 29.10 עד ראשון 1.11 17:00"): it starts where the row above ended,
+            // only when that was on the same date; otherwise it stays unresolved.
+            const continues = rg.from.minutes === null && prevEndKey !== null && keyToParts(prevEndKey).date === fromDate;
+            if (fromDate && toDate && (rg.from.minutes !== null || continues)) {
+              const startKey = continues ? prevEndKey : minuteKey(fromDate, rg.from.minutes);
               const endKey = minuteKey(toDate, rg.to.minutes);
               if (endKey > startKey) interval = { date: fromDate, startKey, endKey };
+              if (interval && continues) {
+                addIssue(
+                  'info',
+                  'RANGE_INFERRED',
+                  `"${row.range.text}" פורש כ־${dm(fromDate)} ${keyToParts(startKey).time} עד ${dm(toDate)} ${keyToParts(endKey).time}: שעת ההתחלה לא צוינה — ממשיך מסיום השורה הקודמת.`,
+                  [ref(block.sheet, row.range.addr)],
+                );
+              }
             }
           } else if (prevEndKey !== null) {
             interval = continueRange(row.range.text, prevEndKey);
@@ -420,21 +431,23 @@ function makeSlot(block, section, position, positionKey, person, interval, row) 
 }
 
 // "ראשון 11/10 00:00 – שלישי 13/10 11:00" → { from, to } each { weekday, day, month, minutes }.
-// Anything less specific returns null (left unresolved).
+// "עד" may touch the hour or the next day ("17:00עד חמישי"). The start hour may be missing
+// (from.minutes = null; the caller decides whether it continues the row above). Else null.
+const RANGE_SEP = new RegExp(`\\s*[-–—]\\s*|(?:(?<=\\d)\\s*|\\s+)עד(?:\\s+|(?=(?:יום\\s*)?(?:${HEBREW_DAYS.join('|')})))`);
 export function parseRangeText(text) {
-  const parts = text.split(/\s+עד\s+|\s*[-–—]\s*/);
+  const parts = text.split(RANGE_SEP);
   if (parts.length !== 2) return null;
   const side = (s) => {
-    const m = /^(\S+)\s+(\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?)\s+(\d{1,2}:\d{2})$/.exec(s.trim());
+    const m = /^(\S+)\s+(\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?)(?:\s+(\d{1,2}:\d{2}))?$/.exec(s.trim());
     if (!m) return null;
     const d = parseDayLabel(`${m[1]} ${m[2]}`);
-    const minutes = parseTimeOfDay(m[3]);
-    if (!d?.day || minutes === null || minutes === 1440) return null;
+    const minutes = m[3] ? parseTimeOfDay(m[3]) : null;
+    if (!d?.day || (m[3] && minutes === null) || minutes === 1440) return null;
     return { ...d, minutes };
   };
   const from = side(parts[0]);
   const to = side(parts[1]);
-  return from && to ? { from, to } : null;
+  return from && to && to.minutes !== null ? { from, to } : null;
 }
 
 const dm = (iso) => `${iso.slice(8)}/${iso.slice(5, 7)}`;
