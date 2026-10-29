@@ -9,8 +9,12 @@
 //                 overlap this table's columns count — tables may sit side by side.
 // Header columns are classified by keyword: יום → day, שעות/שעה → hours, משימה → task,
 // מתאריך–עד → date range. Every other header is a person column labelled by its own text.
+// Side lists: a title "<place> - <days>" ("קלפי - שני שלישי") over two columns of role/name pairs,
+// in either order, with no header row. The role column is the one where every value is a role
+// ("מפקד", "לוחם 1", or a header label of another table). Each pair is a whole-day task on each day.
 // Non-empty cells outside every block are reported as unparsed regions, never guessed at.
-import { headerKey } from './text.js';
+import { HEBREW_DAYS } from './dates.js';
+import { headerKey, matchKey } from './text.js';
 
 const DAY_HEADERS = new Set(['יום']);
 const RANGE_HEADERS = new Set(['מתאריך-עד']);
@@ -116,7 +120,80 @@ export function findBlocks(sheet) {
     });
   }
 
+  const roleLabels = new Set(blocks.flatMap((b) => b.personCols.map((c) => matchKey(c.label))));
+  for (const cell of [...cells.values()].sort((a, b) => a.r - b.r || a.c - b.c)) {
+    if (cell.masterAddr || consumed.has(cell.addr)) continue;
+    const list = sideList(cell, get, roleLabels, consumed);
+    if (!list) continue;
+    blocks.push({ sheet: sheet.name, ...list });
+    consume(cell.r, cell.c);
+    consume(cell.r, cell.c + 1);
+    for (const row of list.rows) for (const x of [row.role, row.person]) consumed.add(x.addr);
+  }
+
   return { blocks, unparsedRegions: findUnparsedRegions(cells, consumed) };
+}
+
+const ROLE = /^(?:מפקד|סמל|קצין|לוחם|נהג|קשר|חובש|מ["״]כ)(?:\s*\d+)?$/;
+
+// "<place> - <days>" → { place, days: [weekday…] } or null. Days may be joined by spaces, commas or
+// ו ("שני ושלישי"); "X עד Y" covers every day from X to Y.
+export function parseListTitle(text) {
+  const i = Math.max(text.lastIndexOf('-'), text.lastIndexOf('–'), text.lastIndexOf('—'));
+  if (i <= 0) return null;
+  const place = text.slice(0, i).trim();
+  const words = text.slice(i + 1).split(/[\s,]+/).filter(Boolean);
+  if (!place || !words.length) return null;
+  const days = [];
+  for (let k = 0; k < words.length; k++) {
+    if (words[k] === 'עד' && days.length && k + 1 < words.length) {
+      const to = dayIndex(words[++k]);
+      if (to < 0) return null;
+      for (let d = (days.at(-1) + 1) % 7; d !== (to + 1) % 7; d = (d + 1) % 7) days.push(d);
+      continue;
+    }
+    const d = dayIndex(words[k]);
+    if (d < 0) return null;
+    days.push(d);
+  }
+  return { place, days: [...new Set(days)] };
+}
+const dayIndex = (w) => {
+  const exact = HEBREW_DAYS.indexOf(w);
+  return exact >= 0 || !w.startsWith('ו') ? exact : HEBREW_DAYS.indexOf(w.slice(1));
+};
+
+function sideList(titleCell, get, roleLabels, consumed) {
+  const parsed = parseListTitle(titleCell.text);
+  if (!parsed) return null;
+  const { r, c } = titleCell;
+  const info = (rr, cc) => {
+    const x = get(rr, cc);
+    return { text: x?.text || '', raw: x?.raw || '', addr: x?.addr || `${columnLetter(cc)}${rr}`, merged: Boolean(x?.merged), masterAddr: x?.masterAddr || null };
+  };
+  const pairs = [];
+  for (let rr = r + 1; ; rr++) {
+    const a = info(rr, c);
+    const b = info(rr, c + 1);
+    if (!a.text && !b.text) break;
+    if (consumed.has(a.addr) || consumed.has(b.addr)) return null;
+    pairs.push({ r: rr, a, b });
+  }
+  if (!pairs.length) return null;
+  const isRole = (x) => Boolean(x.text) && (ROLE.test(x.text) || roleLabels.has(matchKey(x.text)));
+  const roleFirst = pairs.every((p) => isRole(p.a));
+  if (!roleFirst && !pairs.every((p) => isRole(p.b))) return null;
+  return {
+    kind: 'list',
+    headerRow: r,
+    title: { text: parsed.place, addr: titleCell.addr, full: titleCell.text },
+    days: parsed.days,
+    hasTime: false,
+    hasTask: true,
+    cols: [],
+    personCols: [],
+    rows: pairs.map((p) => ({ r: p.r, role: roleFirst ? p.a : p.b, person: roleFirst ? p.b : p.a })),
+  };
 }
 
 function findUnparsedRegions(cells, consumed) {

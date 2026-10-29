@@ -108,6 +108,34 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
         addIssue('warning', 'MISSING_TITLE', `לטבלה בשורה ${block.headerRow} אין כותרת — העמדות שלה מוצגות תחת "ללא כותרת".`, [ref(block.sheet, `A${block.headerRow}`)]);
       }
       if (!block.hasTask) for (const col of block.personCols) addPosition(section, col.label);
+      if (block.kind === 'list') {
+        // Side list: each role/name pair is a whole-day task on each day named in the title.
+        const dates = block.days.map((wd) => (weekStart ? nextWeekdayOnOrAfter(weekStart, wd) : null));
+        if (!weekStart) missingWeekStartCells.push(ref(block.sheet, block.title.addr));
+        addIssue('info', 'WHOLE_DAY_BLOCK', `"${block.title.full}" — רשימה ללא שעות: כל חייל בה משובץ ליום שלם בכל אחד מהימים (${block.days.map((d) => HEBREW_DAYS[d]).join(', ')}).`, [ref(block.sheet, block.title.addr)]);
+        for (const row of block.rows) {
+          const position = row.role.text;
+          const positionKey = addPosition(section, position);
+          const person = { ...row.person, col: { label: position, addr: row.role.addr } };
+          dates.forEach((date, k) => {
+            const startKey = date ? minuteKey(date, 0) : null;
+            const interval = date ? { date, startKey, endKey: startKey + 1440, allDay: true } : null;
+            if (!person.text) {
+              if (interval) slots.push(makeSlot(block, section, position, positionKey, person, interval, row));
+              return;
+            }
+            const b = {
+              sheet: block.sheet,
+              section: section.label,
+              sectionKey: section.key,
+              columnLabel: position,
+              source: { sheet: block.sheet, cell: person.addr, header: row.role.addr, title: block.title.addr, day: block.title.addr, dayText: HEBREW_DAYS[block.days[k]], time: null, timeText: null, task: row.role.addr },
+            };
+            addCell(b, position, positionKey, person, interval ? 'timed' : 'unresolved', interval);
+          });
+        }
+        continue;
+      }
       if (block.kind === 'day' && !block.hasTime) {
         addIssue('info', 'WHOLE_DAY_BLOCK', `בטבלה "${section.label ?? 'ללא כותרת'}" אין עמודת שעות — כל שיבוץ בה נחשב לתורנות של יום שלם (00:00–24:00).`, [ref(block.sheet, block.cols[0].addr)]);
       }
@@ -214,6 +242,8 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
       let prevGroupMerged = false;
       let groupDate = null;
       let groupSpansNextDay = false;
+      let lastDate = null; // date of the previous row, and where its shift ended
+      let lastEndKey = null;
       for (const row of block.rows) {
         const day = row.day;
         const isSlave = Boolean(day.masterAddr);
@@ -225,7 +255,14 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
           prevDayKey = dayKey;
           const parsed = day.text ? parseDayLabel(day.text) : null;
           groupSpansNextDay = parsed?.toWeekday !== undefined;
-          if (!day.text) {
+          // No day, but the hours start exactly where the previous row's shift ended (the merged day
+          // cell stopped one row short): same day as that row. Anything else stays an error.
+          const tr = !day.text && block.hasTime && row.time.text ? parseTimeRange(row.time.text) : null;
+          const continues = tr && !tr.error && lastDate && minuteKey(lastDate, tr.startMin) === lastEndKey;
+          if (continues) {
+            groupDate = lastDate;
+            addIssue('info', 'DAY_INFERRED', `בשורה ${row.r} חסר יום; השעות "${row.time.text}" ממשיכות את השורה הקודמת ולכן שויכה לאותו יום (${dm(lastDate)}).`, [ref(block.sheet, day.addr)]);
+          } else if (!day.text) {
             addIssue('error', 'MISSING_DAY', 'חסר יום בשורה — לא ניתן לשייך את השיבוצים לתאריך.', [ref(block.sheet, day.addr)]);
           } else if (!parsed) {
             addIssue('error', 'INVALID_DAY', `הערך "${day.text}" אינו שם יום מוכר.`, [ref(block.sheet, day.addr)]);
@@ -241,7 +278,7 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
           } else {
             missingWeekStartCells.push(ref(block.sheet, day.addr));
           }
-          if (groupDate && prevDate) {
+          if (groupDate && prevDate && !continues) {
             const gap = dayNumber(groupDate) - dayNumber(prevDate);
             if (gap <= 0) {
               addIssue('warning', 'DAY_ORDER', `היום "${day.text}" מופיע אחרי יום מאוחר יותר בטבלה "${section.label ?? ''}".`, [ref(block.sheet, day.addr)]);
@@ -284,6 +321,8 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
           interval = { date: groupDate, startKey, endKey: startKey + 1440, allDay: true };
           rowKind = 'timed';
         }
+        lastDate = groupDate;
+        lastEndKey = interval?.endKey ?? null;
 
         for (const person of row.persons) {
           const { position, positionKey } = positionOf(row, person);

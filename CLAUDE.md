@@ -37,7 +37,15 @@ user's machine.
 - Day-range label "ראשון - שני" with "17:30-20:00" = from 17:30 on the first day to 20:00 on the
   second ("20:00 - 20:00" = 24h).
 - A row with day names only ("שלישי עד ראשון") continues from the previous row's end and ends on the
-  named day at the same hour.
+  named day at the same hour. A range with a start date but no start hour ("חמישי 29.10 עד ראשון 1.11
+  17:00") starts at the previous row's end only if that was the same date. "עד" may touch the hour
+  ("17:00עד חמישי").
+- A day-table row with an empty day cell (merged day cell stopped one row short) takes the previous
+  row's day only when its start hour equals the previous row's end (18:00-22:00 → 22:00-04:00);
+  otherwise MISSING_DAY error. Noted as DAY_INFERRED.
+- Side lists: title "<place> - <days>" ("קלפי - שני שלישי") over two columns of role/name pairs (either
+  order; role = "מפקד"/"לוחם N"/another table's header) = whole-day task (like kitchen) on each named
+  day of the tab's week.
 - Week start = Sunday on/before the earliest explicit date in the tab. Multi-tab files (a new tab per
   week): only the newest week's tab is read (latest date; no dated tab → the last tab); the page says
   which tab is shown. (`buildRoster` can still merge tabs — newer wins — but `parseRoster` passes one.)

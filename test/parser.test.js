@@ -249,3 +249,96 @@ test('a range row with a start date but no start hour continues from the row abo
   const [g] = find(r, 'גל דמה');
   assert.equal(g.kind, 'unresolved'); // never guessed
 });
+
+// A small fictional sheet: one day table (with a row whose day cell was left empty) and two
+// side lists titled "<place> - <days>" with role/name pairs in either column order.
+async function sideListsWorkbook({ nightStart = '22:00' } = {}) {
+  const { default: ExcelJS } = await import('exceljs');
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('שיבוץ');
+  ws.getCell('A1').value = 'סטטיות';
+  ws.mergeCells('A1:C1');
+  ['יום', 'שעות', 'ש"ג'].forEach((h, i) => (ws.getCell(2, i + 1).value = h));
+  ws.getCell('A3').value = 'שני 26/10';
+  ws.mergeCells('A3:A4');
+  [['14:00-18:00', 'אבי דמה'], ['18:00-22:00', 'בני דמה'], [`${nightStart}-04:00`, 'גל דמה'], ['04:00-10:00', 'דן דמה']].forEach(([t, n], i) => {
+    ws.getCell(3 + i, 2).value = t;
+    ws.getCell(3 + i, 3).value = n;
+  });
+  ws.getCell('A6').value = 'שלישי';
+  // side list 1: name | role
+  ws.getCell('F1').value = 'מחנה דמה -רביעי חמישי';
+  ws.mergeCells('F1:G1');
+  [['הד דמה', 'מפקד'], ['וו דמה', 'לוחם 1']].forEach(([n, r], i) => {
+    ws.getCell(2 + i, 6).value = n;
+    ws.getCell(2 + i, 7).value = r;
+  });
+  // side list 2: role | name
+  ws.getCell('F8').value = 'קלפי - שני שלישי';
+  ws.mergeCells('F8:G8');
+  [['לוחם 1', 'זיו דמה'], ['לוחם 2', 'חן דמה']].forEach(([r, n], i) => {
+    ws.getCell(9 + i, 6).value = r;
+    ws.getCell(9 + i, 7).value = n;
+  });
+  return wb.xlsx.writeBuffer();
+}
+
+test('a row with no day whose hours continue the row above belongs to the same day (noted, not an error)', async () => {
+  const r = await parseRoster(await sideListsWorkbook(), { fileName: 'f.xlsx', today: '2026-10-28' });
+  const [g] = find(r, 'גל דמה');
+  assert.deepEqual([g.kind, g.start, g.end], ['timed', { date: '2026-10-26', time: '22:00' }, { date: '2026-10-27', time: '04:00' }]);
+  assert.ok(!codes(r).includes('MISSING_DAY'));
+  assert.ok(!codes(r).includes('DAY_ORDER'));
+  assert.ok(r.issues.some((i) => i.code === 'DAY_INFERRED' && i.level === 'info'));
+  const [d] = find(r, 'דן דמה'); // the next day cell still starts Tuesday
+  assert.equal(d.start.date, '2026-10-27');
+});
+
+test('a day-less row whose hours do not continue the row above stays an error', async () => {
+  const r = await parseRoster(await sideListsWorkbook({ nightStart: '23:00' }), { fileName: 'f.xlsx', today: '2026-10-28' });
+  assert.equal(find(r, 'גל דמה')[0].kind, 'unresolved');
+  assert.ok(codes(r).includes('MISSING_DAY'));
+});
+
+test('side lists "<place> - <days>" become a whole-day task on each named day, either column order', async () => {
+  const r = await parseRoster(await sideListsWorkbook(), { fileName: 'f.xlsx', today: '2026-10-28' });
+  const camp = find(r, 'הד דמה');
+  assert.deepEqual(camp.map((a) => [a.section, a.position, a.start.date, a.allDay]), [
+    ['מחנה דמה', 'מפקד', '2026-10-28', true],
+    ['מחנה דמה', 'מפקד', '2026-10-29', true],
+  ]);
+  assert.deepEqual(find(r, 'וו דמה').map((a) => a.position), ['לוחם 1', 'לוחם 1']);
+  const polls = find(r, 'זיו דמה');
+  assert.deepEqual(polls.map((a) => [a.section, a.position, a.start.date]), [
+    ['קלפי', 'לוחם 1', '2026-10-26'],
+    ['קלפי', 'לוחם 1', '2026-10-27'],
+  ]);
+  assert.equal(find(r, 'חן דמה').length, 2);
+  assert.ok(!r.issues.some((i) => i.code === 'UNPARSED_REGION'));
+  const opts = r.options.map((g) => g.label);
+  assert.ok(opts.includes('מחנה דמה') && opts.includes('קלפי'));
+});
+
+test('a titled list without day names, or without role-like cells, stays unparsed', async () => {
+  const { default: ExcelJS } = await import('exceljs');
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('שיבוץ');
+  ws.getCell('A1').value = 'סיור';
+  ws.mergeCells('A1:C1');
+  ['יום', 'שעות', 'מפקד'].forEach((h, i) => (ws.getCell(2, i + 1).value = h));
+  ws.getCell('A3').value = 'ראשון 25/10';
+  ws.getCell('B3').value = '06:00-14:00';
+  ws.getCell('C3').value = 'אבי דמה';
+  ws.getCell('F1').value = 'הערות - כללי';
+  ws.mergeCells('F1:G1');
+  ws.getCell('F2').value = 'בני דמה';
+  ws.getCell('G2').value = 'מפקד';
+  ws.getCell('F5').value = 'מחנה דמה - רביעי';
+  ws.mergeCells('F5:G5');
+  ws.getCell('F6').value = 'גל דמה';
+  ws.getCell('G6').value = 'דן דמה';
+  const r = await parseRoster(await wb.xlsx.writeBuffer(), { fileName: 'f.xlsx', today: '2026-10-28' });
+  assert.equal(find(r, 'בני דמה').length, 0);
+  assert.equal(find(r, 'גל דמה').length, 0);
+  assert.equal(r.issues.filter((i) => i.code === 'UNPARSED_REGION').length, 2);
+});
