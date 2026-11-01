@@ -147,6 +147,8 @@ function renderWeekStart() {
   if (!ws) {
     line.className = 'week-missing';
     line.textContent = 'לא נמצא בקובץ תאריך מפורש. כדי לשייך ימים (ראשון, שני…) לתאריכים יש לבחור את תאריך יום ראשון של השבוע:';
+  } else if (ws.source === 'workbook' && !ws.cell) {
+    line.textContent = `תחילת השבוע: ${formatLong(ws.date)} — זוהה משם הלשונית "${ws.text}" (אין תאריכים בתאים). ימים מחושבים ממנו.`;
   } else if (ws.source === 'workbook') {
     line.textContent = `תחילת השבוע: ${formatLong(ws.date)} — זוהה מהתא ${ws.cell} ("${ws.text}"). ימים ללא תאריך בקובץ מחושבים ממנו.`;
   } else {

@@ -131,6 +131,8 @@ test('search form: 24 hours, post options only from the roster, replaced on new 
 
   // Date picker drives search state.
   click(document.querySelector('#date-picker .dp-field'));
+  // The picker opens on today's month (the real clock): step back to October.
+  for (let i = 0; i < 24 && !document.querySelector('#date-picker [data-iso="2026-10-12"]'); i++) click(document.querySelector('#date-picker [aria-label="חודש קודם"]'));
   click(document.querySelector('#date-picker [data-iso="2026-10-12"]'));
   document.getElementById('hour').value = '18';
   document.getElementById('hour').dispatchEvent(new dom.window.Event('change'));

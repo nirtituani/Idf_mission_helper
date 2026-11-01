@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseTimeRange, parseDayLabel, resolveYear, weekdayOf, nextWeekdayOnOrAfter, parseTimeOfDay } from '../src/core/dates.js';
+import { parseTimeRange, parseDayLabel, resolveYear, weekdayOf, nextWeekdayOnOrAfter, parseTimeOfDay, parseSheetNameDate } from '../src/core/dates.js';
 import { matchKey, cleanText } from '../src/core/text.js';
 
 test('time ranges: same day, overnight, 24:00, half hours', () => {
@@ -62,4 +62,16 @@ test('day-range labels: two consecutive days only', () => {
   assert.deepEqual(parseDayLabel('שבת - ראשון'), { weekday: 6, toWeekday: 0 });
   assert.deepEqual(parseDayLabel('שלישי עד רביעי'), { weekday: 2, toWeekday: 3 });
   assert.equal(parseDayLabel('ראשון - שלישי'), null); // not consecutive → not guessed
+});
+
+test('week tab names: the first date of "1-8/11", "1-811", "26-111", "11-1810"; null when there is none', () => {
+  const ref = '2026-11-01';
+  assert.equal(parseSheetNameDate('שיבוץ 1-8/11', ref), '2026-11-01');
+  assert.equal(parseSheetNameDate('שיבוץ 1-811', ref), '2026-11-01');
+  assert.equal(parseSheetNameDate('שיבוץ 26-111', ref), '2026-10-26'); // the week crosses into November
+  assert.equal(parseSheetNameDate('שיבוץ 11-1810', ref), '2026-10-11');
+  assert.equal(parseSheetNameDate('שבוע 26/10-1/11', ref), '2026-10-26');
+  assert.equal(parseSheetNameDate('שבוע 8.11', ref), '2026-11-08');
+  assert.equal(parseSheetNameDate('שבוע 28/12-3/1', '2026-12-20'), '2026-12-28');
+  for (const name of ['טיוטה', 'שבוע 2', 'גיליון 12', 'שבוע 1-2']) assert.equal(parseSheetNameDate(name, ref), null, name);
 });

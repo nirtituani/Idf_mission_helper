@@ -53,6 +53,16 @@ test('a tab without dates is skipped when another tab has dates; with no dates a
   assert.deepEqual(none.assignments.map((a) => a.soldier), ['ב דמה']);
 });
 
+test('a tab without dates in its cells takes its date from the tab name ("שבוע 25-111")', async () => {
+  const t = await tabs([['שבוע 18-2510', 'ראשון 18/10'], ['שבוע 25-111', null]]);
+  assert.equal(t.usedSheet, 'שבוע 25-111');
+  assert.deepEqual(t.assignments.map((a) => [a.soldier, a.start.date]), [['שבוע 25-111 דמה', '2026-10-25']]);
+  assert.equal(t.weekStart.date, '2026-10-25');
+  assert.equal(t.weekStart.cell, null);
+  assert.equal(t.weekStart.text, 'שבוע 25-111');
+  assert.equal(t.issues.filter((i) => i.code === 'NO_WEEK_START').length, 0);
+});
+
 test('side-by-side tables: a header in other columns does not cut a table short', () => {
   const statics = r.assignments.filter((a) => a.section === 'סטטיות');
   assert.equal(statics.length, 10); // continues past row 9, where the outpost header sits in B–C

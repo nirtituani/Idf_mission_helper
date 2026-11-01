@@ -23,6 +23,7 @@ import {
   minuteKey,
   nextWeekdayOnOrAfter,
   parseDayLabel,
+  parseSheetNameDate,
   parseTimeOfDay,
   parseTimeRange,
   resolveYear,
@@ -403,7 +404,8 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
   };
 }
 
-// sheet name → { firstDate, cell, text }: the earliest explicit date in each sheet.
+// sheet name → { firstDate, cell, text }: the earliest explicit date in each sheet. A sheet with no
+// date in its cells falls back to the date in its name ("שיבוץ 1-811"); then cell is null and text is the name.
 export function detectFirstDates(sheetResults, today) {
   const ref = (sheet, addr) => `${sheet}!${addr}`;
   const detectedBySheet = new Map();
@@ -428,6 +430,10 @@ export function detectFirstDates(sheetResults, today) {
         }
       }
     }
+  }
+  for (const { sheet, blocks } of sheetResults) {
+    const iso = blocks.length && !detectedBySheet.has(sheet) ? parseSheetNameDate(sheet, today) : null;
+    if (iso) detectedBySheet.set(sheet, { firstDate: iso, cell: null, text: sheet });
   }
   return detectedBySheet;
 }

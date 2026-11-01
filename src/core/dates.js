@@ -117,6 +117,51 @@ export function resolveYear({ day, month, weekday, year }, referenceIso) {
   return best ? best.iso : null;
 }
 
+// A week tab's name → the ISO date of its first day, or null. Excel forbids "/" in tab names, so the
+// digits are often joined: "1-811" = 1–8/11, "26-111" = 26/10–1/11, "11-1810" = 11–18/10. A joined
+// end is split into day + month only where the result spans about a week. Also "26/10-1/11", "8.11".
+export function parseSheetNameDate(name, referenceIso) {
+  let m = /(?<!\d)(\d{1,2})[./](\d{1,2})\s*[-–]\s*\d{1,2}[./]\d{1,2}(?!\d)/.exec(name);
+  if (m) return nearestDate(Number(m[2]), Number(m[1]), referenceIso);
+  m = /(?<!\d)(\d{1,2})\s*[-–]\s*(\d{1,2})[./](\d{1,2})(?!\d)/.exec(name);
+  if (m) return weekStartingOn(Number(m[1]), Number(m[2]), Number(m[3]), referenceIso);
+  m = /(?<!\d)(\d{1,2})\s*[-–]\s*(\d{3,4})(?!\d)/.exec(name);
+  if (m) {
+    const found = [1, 2]
+      .filter((k) => m[2].length - k <= 2)
+      .map((k) => weekStartingOn(Number(m[1]), Number(m[2].slice(0, k)), Number(m[2].slice(k)), referenceIso))
+      .filter(Boolean);
+    return found.length === 1 ? found[0] : null;
+  }
+  m = /(?<!\d)(\d{1,2})[./](\d{1,2})(?!\d)/.exec(name);
+  return m ? nearestDate(Number(m[2]), Number(m[1]), referenceIso) : null;
+}
+
+// "<startDay>–<endDay>/<month>": the start may be in the previous month (26–1/11).
+function weekStartingOn(startDay, endDay, month, referenceIso) {
+  const end = nearestDate(month, endDay, referenceIso);
+  if (!end) return null;
+  let [y, mo] = [Number(end.slice(0, 4)), month];
+  if (startDay > endDay) [y, mo] = mo === 1 ? [y - 1, 12] : [y, mo - 1];
+  const start = makeIso(y, mo, startDay);
+  if (!isIsoDate(start)) return null;
+  const span = dayNumber(end) - dayNumber(start);
+  return span >= 4 && span <= 8 ? start : null;
+}
+
+// A day/month without a year or weekday → the date in the year nearest the reference, within ~6 months.
+function nearestDate(month, day, referenceIso) {
+  const refYear = Number(referenceIso.slice(0, 4));
+  let best = null;
+  for (const y of [refYear - 1, refYear, refYear + 1]) {
+    const iso = makeIso(y, month, day);
+    if (!isIsoDate(iso)) continue;
+    const dist = Math.abs(dayNumber(iso) - dayNumber(referenceIso));
+    if (dist <= MAX_YEARLESS_DISTANCE_DAYS && (!best || dist < best.dist)) best = { iso, dist };
+  }
+  return best ? best.iso : null;
+}
+
 // First date >= fromIso with the given weekday.
 export function nextWeekdayOnOrAfter(fromIso, weekday) {
   return addDays(fromIso, (weekday - weekdayOf(fromIso) + 7) % 7);
