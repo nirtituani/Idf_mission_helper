@@ -39,16 +39,11 @@ async function tabs(list) {
   return parseRoster(Buffer.from(await wb.xlsx.writeBuffer()), { fileName: 'f.xlsx', today: '2026-10-18' });
 }
 
-test('the newest week wins by date, not by tab order', async () => {
-  const t = await tabs([['חדש', 'ראשון 18/10'], ['ישן', 'ראשון 11/10']]);
-  assert.equal(t.usedSheet, 'חדש');
-  assert.deepEqual(t.assignments.map((a) => a.soldier), ['חדש דמה']);
-});
-
-test('a tab without dates is skipped when another tab has dates; with no dates at all the last tab is used', async () => {
-  const dated = await tabs([['ישן', 'ראשון 11/10'], ['טיוטה', null]]);
-  assert.equal(dated.usedSheet, 'ישן');
-  const none = await tabs([['א', null], ['ב', null]]);
+test('the last tab is read, whatever the dates in the other tabs', async () => {
+  const t = await tabs([['ב', 'ראשון 18/10'], ['א', 'ראשון 11/10']]);
+  assert.equal(t.usedSheet, 'א');
+  assert.deepEqual(t.assignments.map((a) => a.soldier), ['א דמה']);
+  const none = await tabs([['ישן', 'ראשון 11/10'], ['ב', null]]);
   assert.equal(none.usedSheet, 'ב');
   assert.deepEqual(none.assignments.map((a) => a.soldier), ['ב דמה']);
 });

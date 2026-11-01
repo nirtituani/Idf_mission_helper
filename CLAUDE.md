@@ -46,8 +46,9 @@ user's machine.
 - Side lists: title "<place> - <days>" ("קלפי - שני שלישי") over two columns of role/name pairs (either
   order; role = "מפקד"/"לוחם N"/another table's header) = whole-day task (like kitchen) on each named
   day of the tab's week.
-- Week start = Sunday on/before the earliest explicit date in the tab. Multi-tab files (a new tab per
-  week): only the newest week's tab is read (latest date; no dated tab → the last tab); the page says
+- Week start = Sunday on/before the earliest explicit date in the tab; a tab with no dates in its cells
+  takes it from its name ("שיבוץ 1-811" = 1–8/11). Multi-tab files (a new tab per
+  week): only the last tab with tables is read (by request — it is this week's); the page says
   which tab is shown. (`buildRoster` can still merge tabs — newer wins — but `parseRoster` passes one.)
 - Cell "א/ב" = shift for both soldiers; "(…)" = note.
 - Near-identical spellings are the same soldier (punctuation/spaces/`*`, doubled ו/י, one-letter or
