@@ -37,7 +37,8 @@ user's machine.
 - Day-range label "ראשון - שני" with "17:30-20:00" = from 17:30 on the first day to 20:00 on the
   second ("20:00 - 20:00" = 24h).
 - A row with day names only ("שלישי עד ראשון") continues from the previous row's end and ends on the
-  named day at the same hour. A range with a start date but no start hour ("חמישי 29.10 עד ראשון 1.11
+  named day at the same hour. As the first row (nothing above), it runs morning to morning (08:00, by
+  request) from the named day in the tab's week. A range with a start date but no start hour ("חמישי 29.10 עד ראשון 1.11
   17:00") starts at the previous row's end only if that was the same date. "עד" may touch the hour
   ("17:00עד חמישי").
 - A day-table row with an empty day cell (merged day cell stopped one row short) takes the previous

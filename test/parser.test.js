@@ -250,6 +250,26 @@ test('a range row with a start date but no start hour continues from the row abo
   assert.equal(g.kind, 'unresolved'); // never guessed
 });
 
+test('a range of day names only ("ראשון-רביעי") runs morning to morning in the tab\'s week; the next row continues it', async () => {
+  const { default: ExcelJS } = await import('exceljs');
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('שיבוץ 1-811');
+  ws.getCell('A1').value = 'מוצב';
+  ws.mergeCells('A1:C1');
+  ['מתאריך – עד', 'מפקד', 'לוחם 1'].forEach((h, i) => (ws.getCell(2, i + 1).value = h));
+  ws.getCell('A3').value = 'ראשון-רביעי';
+  ws.getCell('B3').value = 'אבי דמה';
+  ws.getCell('A4').value = 'רביעי-ראשון';
+  ws.getCell('B4').value = 'בני דמה';
+  const r = await parseRoster(await wb.xlsx.writeBuffer(), { fileName: 'f.xlsx', today: '2026-11-01' });
+  const [a] = find(r, 'אבי דמה');
+  assert.deepEqual([a.kind, a.start, a.end], ['timed', { date: '2026-11-01', time: '08:00' }, { date: '2026-11-04', time: '08:00' }]);
+  const [b] = find(r, 'בני דמה');
+  assert.deepEqual([b.kind, b.start, b.end], ['timed', { date: '2026-11-04', time: '08:00' }, { date: '2026-11-08', time: '08:00' }]);
+  assert.ok(r.issues.some((i) => i.code === 'RANGE_INFERRED' && i.message.includes('01/11 08:00 עד 04/11 08:00')));
+  assert.equal(r.issues.filter((i) => i.code === 'UNRESOLVED_RANGE').length, 0);
+});
+
 // A small fictional sheet: one day table (with a row whose day cell was left empty) and two
 // side lists titled "<place> - <days>" with role/name pairs in either column order.
 async function sideListsWorkbook({ nightStart = '22:00' } = {}) {

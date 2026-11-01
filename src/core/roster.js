@@ -200,6 +200,13 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
                 );
               }
             }
+          } else if (prevEndKey === null && weekStart && (interval = weekDaysRange(row.range.text, weekStart))) {
+            addIssue(
+              'info',
+              'RANGE_INFERRED',
+              `"${row.range.text}" פורש כ־${dm(interval.date)} ${keyToParts(interval.startKey).time} עד ${dm(keyToParts(interval.endKey).date)} ${keyToParts(interval.endKey).time}: ימים ללא שעות — החלפה בבוקר, בשבוע של הלשונית.`,
+              [ref(block.sheet, row.range.addr)],
+            );
           } else if (prevEndKey !== null) {
             interval = continueRange(row.range.text, prevEndKey);
             if (interval) {
@@ -511,6 +518,22 @@ export function continueRange(text, prevEndKey) {
   const endDate = nextWeekdayOnOrAfter(addDays(start.date, 1), to);
   const endKey = minuteKey(endDate, prevEndKey - minuteKey(start.date, 0));
   return { date: start.date, startKey: prevEndKey, endKey };
+}
+
+// Handover hour for a range of day names only (by request: it starts in the morning and ends in the morning).
+const MORNING_HANDOVER = 8 * 60;
+
+// "ראשון-רביעי" as the first row of a range table (nothing above to continue): the first named day in
+// the tab's week, morning to morning on the next occurrence of the second day. Anything else → null.
+function weekDaysRange(text, weekStart) {
+  const parts = text.split(/\s+עד\s+|\s*[-–—]\s*/);
+  if (parts.length !== 2) return null;
+  const from = dayNameIndex(parts[0]);
+  const to = dayNameIndex(parts[1]);
+  if (from < 0 || to < 0) return null;
+  const date = nextWeekdayOnOrAfter(weekStart, from);
+  const endDate = nextWeekdayOnOrAfter(addDays(date, 1), to);
+  return { date, startKey: minuteKey(date, MORNING_HANDOVER), endKey: minuteKey(endDate, MORNING_HANDOVER) };
 }
 
 function dayNameIndex(word) {
