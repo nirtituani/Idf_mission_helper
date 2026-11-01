@@ -4,7 +4,8 @@
 //   * identical first name, and a last name that is
 //       - one letter apart, or two adjacent letters swapped, when ≥4 letters (רון ברקוביץ = רון ברקוביץה, טל ליבוביץ = טל ליפוביץ, דן ימהרן = דן יהמרן)
 //       - identical once the vowel letters א/ו/י are ignored (אור זדה = אור זאדה)
-// A one-letter difference in the first name is NOT merged (נוי ≠ נוה).
+//   * identical last name, and a first name that differs only by ו/י inside it, ≥3 letters (נועם = נעם)
+// Any other difference in the first name is NOT merged (נוי ≠ נוה, רון ≠ רן, דן ≠ דני).
 //   * a short form whose words all appear in exactly ONE longer name (כהן = אור כהן, אלון = אלון לוי)
 // Not merged (reported as "possibly the same" instead): a short form matching several soldiers
 // (דוד vs דוד כהן and דוד לוי). Multi-name cells and (notes) are split earlier by roster.js.
@@ -37,6 +38,11 @@ export function nameRelation(a, b) {
   const tb = tokens(b);
   if (!ta.length || !tb.length) return null;
   let almost = ta.join('') === tb.join('');
+  if (!almost && ta.length >= 2 && tb.length >= 2 && ta[0] !== tb[0] && ta.slice(1).join('') === tb.slice(1).join('')) {
+    // Same last name; first name spelled with/without a vowel letter inside (נועם = נעם).
+    const inner = (w) => (w.length > 2 ? w[0] + w.slice(1, -1).replace(/[וי]/g, '') + w.at(-1) : w);
+    almost = Math.min(ta[0].length, tb[0].length) >= 3 && inner(ta[0]) === inner(tb[0]);
+  }
   if (!almost && ta.length >= 2 && tb.length >= 2 && ta[0] === tb[0]) {
     const lastA = ta.slice(1).join('');
     const lastB = tb.slice(1).join('');

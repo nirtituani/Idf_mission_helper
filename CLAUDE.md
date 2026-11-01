@@ -53,7 +53,8 @@ user's machine.
   which tab is shown. (`buildRoster` can still merge tabs — newer wins — but `parseRoster` passes one.)
 - Cell "א/ב" = shift for both soldiers; "(…)" = note.
 - Near-identical spellings are the same soldier (punctuation/spaces/`*`, doubled ו/י, one-letter or
-  swapped-letter difference in the last name with the same first name); a short form merges only if it
+  swapped-letter difference in the last name with the same first name; same last name and a first name
+  differing only by ו/י inside it, ≥3 letters — נועם = נעם, but רון ≠ רן, דן ≠ דני); a short form merges only if it
   matches exactly one soldier.
 - "מחלקה N" / "פלוגה" / "צוות" = a unit, not a soldier: shown in search and board, excluded from the
   soldier list/count, never messaged, never an overlap.
