@@ -270,13 +270,21 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
           prevDayKey = dayKey;
           const parsed = day.text ? parseDayLabel(day.text) : null;
           groupSpansNextDay = parsed?.toWeekday !== undefined;
-          // No day, but the hours start exactly where the previous row's shift ended (the merged day
-          // cell stopped one row short): same day as that row. Anything else stays an error.
-          const tr = !day.text && block.hasTime && row.time.text ? parseTimeRange(row.time.text) : null;
-          const continues = tr && !tr.error && lastDate && minuteKey(lastDate, tr.startMin) === lastEndKey;
-          if (continues) {
+          // The hours start exactly where the previous row's shift ended on that row's day.
+          const tr = block.hasTime && row.time.text ? parseTimeRange(row.time.text) : null;
+          const continues = Boolean(tr && !tr.error && lastDate && minuteKey(lastDate, tr.startMin) === lastEndKey);
+          let sameDayAsLast = false;
+          if (!day.text && continues) {
+            // No day (the merged day cell stopped one row short): same day as the row above.
             groupDate = lastDate;
+            sameDayAsLast = true;
             addIssue('info', 'DAY_INFERRED', `בשורה ${row.r} חסר יום; השעות "${row.time.text}" ממשיכות את השורה הקודמת ולכן שויכה לאותו יום (${dm(lastDate)}).`, [ref(block.sheet, day.addr)]);
+          } else if (continues && parsed && !parsed.day && parsed.toWeekday === undefined && parsed.weekday === weekdayOf(lastDate)) {
+            // The same day name written again in its own cell ("ראשון" 14:00-22:00, then "ראשון"
+            // 22:00-06:00): the same day, not the next week's.
+            groupDate = lastDate;
+            sameDayAsLast = true;
+            addIssue('info', 'DAY_REPEATED', `בשורה ${row.r} היום "${day.text}" נכתב שוב; השעות "${row.time.text}" ממשיכות את השורה הקודמת ולכן זה אותו יום (${dm(lastDate)}).`, [ref(block.sheet, day.addr)]);
           } else if (!day.text) {
             addIssue('error', 'MISSING_DAY', 'חסר יום בשורה — לא ניתן לשייך את השיבוצים לתאריך.', [ref(block.sheet, day.addr)]);
           } else if (!parsed) {
@@ -293,7 +301,7 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
           } else {
             missingWeekStartCells.push(ref(block.sheet, day.addr));
           }
-          if (groupDate && prevDate && !continues) {
+          if (groupDate && prevDate && !sameDayAsLast) {
             const gap = dayNumber(groupDate) - dayNumber(prevDate);
             if (gap <= 0) {
               addIssue('warning', 'DAY_ORDER', `היום "${day.text}" מופיע אחרי יום מאוחר יותר בטבלה "${section.label ?? ''}".`, [ref(block.sheet, day.addr)]);

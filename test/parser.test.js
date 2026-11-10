@@ -435,3 +435,34 @@ test('a table title merged over the table\'s other columns (not above its first 
   const untitled = r.issues.filter((i) => i.code === 'MISSING_TITLE');
   assert.deepEqual(untitled.map((i) => i.cells), [['שיבוץ!B7']]); // points at the table's own header cell
 });
+
+test('a day name written again in its own cell, with hours continuing the row above, is the same day', async () => {
+  const { default: ExcelJS } = await import('exceljs');
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('שיבוץ');
+  ws.getCell('A1').value = 'חמ"ל';
+  ws.mergeCells('A1:C1');
+  ['יום', 'שעות', 'חמליסט'].forEach((h, i) => (ws.getCell(2, i + 1).value = h));
+  const rows = [
+    ['שלישי', '14:00-22:00', 'אבי דמה'], // Tuesday 10/11
+    ['רביעי', '06:00-14:00', 'בני דמה'], // Wednesday 11/11, merged down one row
+    [null, '14:00-22:00', 'גל דמה'],
+    ['רביעי', '22:00-06:00', 'דנה דמה'], // written again: still Wednesday 11/11 (continues at 22:00)
+    ['חמישי', '06:00-14:00', 'הדר דמה'], // Thursday 12/11, merged down one row
+    [null, '14:00-22:00', 'זיו דמה'],
+    ['חמישי', '06:00-10:00', 'ורד דמה'], // written again after a merged cell, NOT continuing (22:00 ≠ 06:00): next Thursday
+  ];
+  rows.forEach(([day, hours, name], i) => {
+    if (day) ws.getCell(`A${i + 3}`).value = day;
+    ws.getCell(`B${i + 3}`).value = hours;
+    ws.getCell(`C${i + 3}`).value = name;
+  });
+  ws.mergeCells('A4:A5');
+  ws.mergeCells('A7:A8');
+  const r = await parseRoster(await wb.xlsx.writeBuffer(), { fileName: 'f.xlsx', today: '2026-11-10', weekStartOverride: '2026-11-08' });
+  const day = (name) => find(r, name)[0]?.start?.date ?? 'none';
+  assert.deepEqual(['אבי', 'בני', 'גל', 'דנה', 'הדר', 'זיו'].map((n) => day(`${n} דמה`)), ['2026-11-10', '2026-11-11', '2026-11-11', '2026-11-11', '2026-11-12', '2026-11-12']);
+  assert.equal(day('ורד דמה'), 'none'); // 19/11: after the week, so not read
+  assert.deepEqual(r.issues.filter((i) => i.code === 'DAY_REPEATED').map((i) => i.cells[0]), ['שיבוץ!A6']);
+  assert.ok(!r.issues.some((i) => i.code === 'DAY_ORDER'));
+});

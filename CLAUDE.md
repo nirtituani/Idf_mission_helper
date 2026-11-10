@@ -43,6 +43,8 @@ user's machine.
   request) from the named day in the tab's week. A range with a start date but no start hour ("חמישי 29.10 עד ראשון 1.11
   17:00") starts at the previous row's end only if that was the same date. "עד" may touch the hour
   ("17:00עד חמישי").
+- A day name written again in its own cell after a merged day cell ("ראשון" 14:00-22:00, then "ראשון"
+  22:00-06:00) is the same day when its hours continue the row above (DAY_REPEATED); otherwise the next one.
 - A day-table row with an empty day cell (merged day cell stopped one row short) takes the previous
   row's day only when its start hour equals the previous row's end (18:00-22:00 → 22:00-04:00);
   otherwise MISSING_DAY error. Noted as DAY_INFERRED.
