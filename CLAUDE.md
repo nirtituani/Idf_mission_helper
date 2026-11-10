@@ -36,6 +36,7 @@ user's machine.
 - Names without a task are ignored.
 - Day-range label "ראשון - שני" with "17:30-20:00" = from 17:30 on the first day to 20:00 on the
   second ("20:00 - 20:00" = 24h).
+- A date-range cell merged down several rows is one range: every row of the merge gets the first row's dates.
 - A row with day names only ("שלישי עד ראשון") continues from the previous row's end and ends on the
   named day at the same hour. As the first row (nothing above), it runs morning to morning (08:00, by
   request) from the named day in the tab's week. A range with a start date but no start hour ("חמישי 29.10 עד ראשון 1.11
@@ -48,7 +49,9 @@ user's machine.
   order; role = "מפקד"/"לוחם N"/another table's header) = whole-day task (like kitchen) on each named
   day of the tab's week.
 - Week start = Sunday on/before the earliest explicit date in the tab; a tab with no dates in its cells
-  takes it from its name ("שיבוץ 1-811" = 1–8/11). Multi-tab files (a new tab per
+  takes it from its name ("שיבוץ 1-811" = 1–8/11; a name may span up to 14 days, "8-1911" = 8–19/11). Only
+  the week itself is read: shifts starting after the following Sunday are left out (OUTSIDE_WEEK note), the
+  same Sunday-to-Sunday window as the WhatsApp messages (by request). Multi-tab files (a new tab per
   week): only the last tab with tables is read (by request — it is this week's); the page says
   which tab is shown. (`buildRoster` can still merge tabs — newer wins — but `parseRoster` passes one.)
 - Cell "א/ב" = shift for both soldiers; "(…)" = note.

@@ -119,7 +119,8 @@ export function resolveYear({ day, month, weekday, year }, referenceIso) {
 
 // A week tab's name → the ISO date of its first day, or null. Excel forbids "/" in tab names, so the
 // digits are often joined: "1-811" = 1–8/11, "26-111" = 26/10–1/11, "11-1810" = 11–18/10. A joined
-// end is split into day + month only where the result spans about a week. Also "26/10-1/11", "8.11".
+// end is split into day + month only where the result spans 4–14 days (a week, or a name like "8-1911"
+// = 8–19/11 that runs longer); a longer span is not a week tab. Also "26/10-1/11", "8.11".
 export function parseSheetNameDate(name, referenceIso) {
   let m = /(?<!\d)(\d{1,2})[./](\d{1,2})\s*[-–]\s*\d{1,2}[./]\d{1,2}(?!\d)/.exec(name);
   if (m) return nearestDate(Number(m[2]), Number(m[1]), referenceIso);
@@ -146,7 +147,7 @@ function weekStartingOn(startDay, endDay, month, referenceIso) {
   const start = makeIso(y, mo, startDay);
   if (!isIsoDate(start)) return null;
   const span = dayNumber(end) - dayNumber(start);
-  return span >= 4 && span <= 8 ? start : null;
+  return span >= 4 && span <= 14 ? start : null;
 }
 
 // A day/month without a year or weekday → the date in the year nearest the reference, within ~6 months.

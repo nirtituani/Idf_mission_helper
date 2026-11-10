@@ -70,6 +70,8 @@ test('week tab names: the first date of "1-8/11", "1-811", "26-111", "11-1810"; 
   assert.equal(parseSheetNameDate('שיבוץ 1-811', ref), '2026-11-01');
   assert.equal(parseSheetNameDate('שיבוץ 26-111', ref), '2026-10-26'); // the week crosses into November
   assert.equal(parseSheetNameDate('שיבוץ 11-1810', ref), '2026-10-11');
+  assert.equal(parseSheetNameDate('שיבוץ 8-1911', ref), '2026-11-08'); // 8–19/11: longer than a week, the first day is still clear
+  assert.equal(parseSheetNameDate('שבוע 1-2911', ref), null); // 1–29/11: a month is not a week tab
   assert.equal(parseSheetNameDate('שבוע 26/10-1/11', ref), '2026-10-26');
   assert.equal(parseSheetNameDate('שבוע 8.11', ref), '2026-11-08');
   assert.equal(parseSheetNameDate('שבוע 28/12-3/1', '2026-12-20'), '2026-12-28');

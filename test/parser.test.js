@@ -362,3 +362,54 @@ test('a titled list without day names, or without role-like cells, stays unparse
   assert.equal(find(r, 'גל דמה').length, 0);
   assert.equal(r.issues.filter((i) => i.code === 'UNPARSED_REGION').length, 2);
 });
+
+test('a tab that runs past its week: only Sunday to the following Sunday is read', async () => {
+  const { default: ExcelJS } = await import('exceljs');
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('שיבוץ 8-1911'); // 8–19/11 in the name; the week is 8–15/11
+  ws.getCell('A1').value = 'סיור';
+  ws.mergeCells('A1:C1');
+  ['יום', 'שעות', 'מפקד'].forEach((h, i) => (ws.getCell(2, i + 1).value = h));
+  const rows = [['ראשון', 'אבי דמה'], ['שני', 'בני דמה'], ['שבת', 'גל דמה'], ['ראשון', 'דנה דמה'], ['שני', 'הדר דמה'], ['שלישי', 'ורד דמה']];
+  rows.forEach(([day, name], i) => {
+    ws.getCell(`A${i + 3}`).value = day;
+    ws.getCell(`B${i + 3}`).value = '08:00-12:00';
+    ws.getCell(`C${i + 3}`).value = name;
+  });
+  ws.getCell('C8').value = null; // Tuesday 17/11 (after the week) left empty: a slot, not an assignment
+  const r = await parseRoster(await wb.xlsx.writeBuffer(), { fileName: 'f.xlsx', today: '2026-11-10' });
+  assert.equal(r.weekStart.date, '2026-11-08');
+  assert.deepEqual(r.assignments.map((a) => [a.soldier, a.start.date]), [
+    ['אבי דמה', '2026-11-08'], ['בני דמה', '2026-11-09'], ['גל דמה', '2026-11-14'], ['דנה דמה', '2026-11-15'],
+  ]);
+  assert.ok(r.slots.every((s) => s.start.date <= '2026-11-15'));
+  const note = r.issues.find((i) => i.code === 'OUTSIDE_WEEK');
+  assert.equal(note.level, 'info');
+  assert.match(note.message, /1 שיבוצים/);
+  assert.match(note.message, /08\/11 עד 15\/11/);
+  assert.deepEqual(note.cells, ['שיבוץ 8-1911!C7']);
+});
+
+test('a date-range cell merged down several rows gives every row the same dates', async () => {
+  const { default: ExcelJS } = await import('exceljs');
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('שיבוץ 8-1911');
+  ws.getCell('A1').value = 'מוצב';
+  ws.mergeCells('A1:C1');
+  ['מתאריך – עד', 'מפקד', 'לוחם 1'].forEach((h, i) => (ws.getCell(2, i + 1).value = h));
+  const groups = [['ראשון-רביעי', 3], ['רביעי - ראשון', 5], ['ראשון-חמישי', 7]];
+  for (const [text, row] of groups) {
+    ws.getCell(`A${row}`).value = text;
+    ws.mergeCells(`A${row}:A${row + 1}`);
+  }
+  ['אבי', 'בני', 'גל', 'דנה', 'הדר', 'ורד'].forEach((n, i) => (ws.getCell(`B${i + 3}`).value = `${n} דמה`));
+  const r = await parseRoster(await wb.xlsx.writeBuffer(), { fileName: 'f.xlsx', today: '2026-11-10' });
+  const when = (name) => find(r, name).map((a) => (a.start ? `${a.start.date} ${a.start.time} → ${a.end.date} ${a.end.time}` : "unresolved"));
+  assert.deepEqual(when('אבי דמה'), ['2026-11-08 08:00 → 2026-11-11 08:00']);
+  assert.deepEqual(when('בני דמה'), ['2026-11-08 08:00 → 2026-11-11 08:00']); // second row of the merged cell
+  assert.deepEqual(when('גל דמה'), ['2026-11-11 08:00 → 2026-11-15 08:00']);
+  assert.deepEqual(when('דנה דמה'), ['2026-11-11 08:00 → 2026-11-15 08:00']);
+  assert.deepEqual(when('הדר דמה'), ['2026-11-15 08:00 → 2026-11-19 08:00']);
+  assert.deepEqual(when('ורד דמה'), ['2026-11-15 08:00 → 2026-11-19 08:00']); // not restarted at the week's start
+  assert.equal(r.issues.filter((i) => i.code === 'UNRESOLVED_RANGE').length, 0);
+});

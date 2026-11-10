@@ -178,10 +178,16 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
 
       if (block.kind === 'range') {
         let prevEndKey = null;
+        // A range cell merged down several rows ("ראשון-רביעי" over three soldiers' rows) is one range:
+        // every row of the merge gets the first row's dates, instead of continuing from the row above.
+        const byMasterRange = new Map(); // range cell addr → interval (or null) of its first row
         for (const row of block.rows) {
-          const rg = parseRangeText(row.range.text);
-          let interval = null;
-          if (rg) {
+          const merged = row.range.masterAddr && byMasterRange.has(row.range.masterAddr);
+          const rg = merged ? null : parseRangeText(row.range.text);
+          let interval = merged ? byMasterRange.get(row.range.masterAddr) : null;
+          if (merged) {
+            // same dates as the first row of the merged cell; nothing new to infer or report
+          } else if (rg) {
             const fromDate = resolveYear(rg.from, yearRef);
             const toDate = resolveYear(rg.to, yearRef);
             // No start hour ("חמישי 29.10 עד ראשון 1.11 17:00"): it starts where the row above ended,
@@ -221,6 +227,7 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
             }
           }
           prevEndKey = interval ? interval.endKey : null;
+          if (!merged) byMasterRange.set(row.range.addr, interval);
           const rowAssignments = [];
           for (const person of row.persons) {
             const { position, positionKey } = positionOf(row, person);
@@ -382,6 +389,31 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
     assignments.splice(0, assignments.length, ...kept);
     for (const issue of issues) issue.assignmentIds = issue.assignmentIds.filter((id) => !dropped.has(id));
   }
+
+  // ---- 4. Only the week ---------------------------------------------------------------------
+  // A tab may run past its week ("שיבוץ 8-1911" holds 8–19/11). Only Sunday to the following
+  // Sunday is read (by request) — the same window as the WhatsApp messages. Later rows are left
+  // out and counted in one note.
+  const weekEndOf = (sheet) => (weekStartOf(sheet) ? addDays(weekStartOf(sheet), 7) : null);
+  const afterWeek = (x) => x.startKey !== null && weekEndOf(x.sheet ?? x.cell.split('!')[0]) !== null && keyToParts(x.startKey).date > weekEndOf(x.sheet ?? x.cell.split('!')[0]);
+  const outside = assignments.filter((a) => a.kind === 'timed' && afterWeek(a));
+  if (outside.length) {
+    const gone = new Set(outside.map((a) => a.id));
+    const kept = assignments.filter((a) => !gone.has(a.id));
+    assignments.splice(0, assignments.length, ...kept);
+    for (const issue of issues) issue.assignmentIds = issue.assignmentIds.filter((id) => !gone.has(id));
+    for (const sheet of new Set(outside.map((a) => a.sheet))) {
+      const mine = outside.filter((a) => a.sheet === sheet);
+      addIssue(
+        'info',
+        'OUTSIDE_WEEK',
+        `${mine.length} שיבוצים בלשונית "${sheet}" מתחילים אחרי סוף השבוע ולא נכללו — מוצג השבוע ${dm(weekStartOf(sheet))} עד ${dm(weekEndOf(sheet))}.`,
+        [...new Set(mine.map((a) => ref(sheet, a.source.cell)))].slice(0, 5),
+      );
+    }
+  }
+  const slotsInWeek = slots.filter((x) => !afterWeek(x));
+  slots.splice(0, slots.length, ...slotsInWeek);
 
   if (missingWeekStartCells.length) {
     addIssue('error', 'NO_WEEK_START', 'לא נמצא בקובץ תאריך מפורש, ולכן לא ניתן לקבוע תאריכים לימים. יש לבחור את תאריך תחילת השבוע.', missingWeekStartCells.slice(0, 5));
