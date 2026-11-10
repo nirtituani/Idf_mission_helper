@@ -250,7 +250,7 @@ test('a range row with a start date but no start hour continues from the row abo
   assert.equal(g.kind, 'unresolved'); // never guessed
 });
 
-test('a range of day names only ("ראשון-רביעי") runs morning to morning in the tab\'s week; the next row continues it', async () => {
+test('a range of day names only ("ראשון-רביעי") runs 16:00 to 16:00 in the tab\'s week; the next row continues it', async () => {
   const { default: ExcelJS } = await import('exceljs');
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('שיבוץ 1-811');
@@ -263,10 +263,10 @@ test('a range of day names only ("ראשון-רביעי") runs morning to mornin
   ws.getCell('B4').value = 'בני דמה';
   const r = await parseRoster(await wb.xlsx.writeBuffer(), { fileName: 'f.xlsx', today: '2026-11-01' });
   const [a] = find(r, 'אבי דמה');
-  assert.deepEqual([a.kind, a.start, a.end], ['timed', { date: '2026-11-01', time: '08:00' }, { date: '2026-11-04', time: '08:00' }]);
+  assert.deepEqual([a.kind, a.start, a.end], ['timed', { date: '2026-11-01', time: '16:00' }, { date: '2026-11-04', time: '16:00' }]);
   const [b] = find(r, 'בני דמה');
-  assert.deepEqual([b.kind, b.start, b.end], ['timed', { date: '2026-11-04', time: '08:00' }, { date: '2026-11-08', time: '08:00' }]);
-  assert.ok(r.issues.some((i) => i.code === 'RANGE_INFERRED' && i.message.includes('01/11 08:00 עד 04/11 08:00')));
+  assert.deepEqual([b.kind, b.start, b.end], ['timed', { date: '2026-11-04', time: '16:00' }, { date: '2026-11-08', time: '16:00' }]);
+  assert.ok(r.issues.some((i) => i.code === 'RANGE_INFERRED' && i.message.includes('01/11 16:00 עד 04/11 16:00')));
   assert.equal(r.issues.filter((i) => i.code === 'UNRESOLVED_RANGE').length, 0);
 });
 
@@ -405,12 +405,12 @@ test('a date-range cell merged down several rows gives every row the same dates'
   ['אבי', 'בני', 'גל', 'דנה', 'הדר', 'ורד'].forEach((n, i) => (ws.getCell(`B${i + 3}`).value = `${n} דמה`));
   const r = await parseRoster(await wb.xlsx.writeBuffer(), { fileName: 'f.xlsx', today: '2026-11-10' });
   const when = (name) => find(r, name).map((a) => (a.start ? `${a.start.date} ${a.start.time} → ${a.end.date} ${a.end.time}` : "unresolved"));
-  assert.deepEqual(when('אבי דמה'), ['2026-11-08 08:00 → 2026-11-11 08:00']);
-  assert.deepEqual(when('בני דמה'), ['2026-11-08 08:00 → 2026-11-11 08:00']); // second row of the merged cell
-  assert.deepEqual(when('גל דמה'), ['2026-11-11 08:00 → 2026-11-15 08:00']);
-  assert.deepEqual(when('דנה דמה'), ['2026-11-11 08:00 → 2026-11-15 08:00']);
-  assert.deepEqual(when('הדר דמה'), ['2026-11-15 08:00 → 2026-11-19 08:00']);
-  assert.deepEqual(when('ורד דמה'), ['2026-11-15 08:00 → 2026-11-19 08:00']); // not restarted at the week's start
+  assert.deepEqual(when('אבי דמה'), ['2026-11-08 16:00 → 2026-11-11 16:00']);
+  assert.deepEqual(when('בני דמה'), ['2026-11-08 16:00 → 2026-11-11 16:00']); // second row of the merged cell
+  assert.deepEqual(when('גל דמה'), ['2026-11-11 16:00 → 2026-11-15 16:00']);
+  assert.deepEqual(when('דנה דמה'), ['2026-11-11 16:00 → 2026-11-15 16:00']);
+  assert.deepEqual(when('הדר דמה'), ['2026-11-15 16:00 → 2026-11-19 16:00']);
+  assert.deepEqual(when('ורד דמה'), ['2026-11-15 16:00 → 2026-11-19 16:00']); // not restarted at the week's start
   assert.equal(r.issues.filter((i) => i.code === 'UNRESOLVED_RANGE').length, 0);
 });
 

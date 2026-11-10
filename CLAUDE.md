@@ -39,7 +39,7 @@ user's machine.
   second ("20:00 - 20:00" = 24h).
 - A date-range cell merged down several rows is one range: every row of the merge gets the first row's dates.
 - A row with day names only ("שלישי עד ראשון") continues from the previous row's end and ends on the
-  named day at the same hour. As the first row (nothing above), it runs morning to morning (08:00, by
+  named day at the same hour. As the first row (nothing above), it runs 16:00 to 16:00 (by
   request) from the named day in the tab's week. A range with a start date but no start hour ("חמישי 29.10 עד ראשון 1.11
   17:00") starts at the previous row's end only if that was the same date. "עד" may touch the hour
   ("17:00עד חמישי").
