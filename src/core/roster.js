@@ -106,7 +106,7 @@ export function buildRoster(sheetResults, { today, weekStartOverride = null }) {
     for (const block of blocks) {
       const section = sectionFor(block);
       if (!block.title) {
-        addIssue('warning', 'MISSING_TITLE', `לטבלה בשורה ${block.headerRow} אין כותרת — העמדות שלה מוצגות תחת "ללא כותרת".`, [ref(block.sheet, `A${block.headerRow}`)]);
+        addIssue('warning', 'MISSING_TITLE', `לטבלה בשורה ${block.headerRow} אין כותרת — העמדות שלה מוצגות תחת "ללא כותרת".`, [ref(block.sheet, block.cols[0]?.addr ?? `A${block.headerRow}`)]);
       }
       if (!block.hasTask) for (const col of block.personCols) addPosition(section, col.label);
       if (block.kind === 'list') {

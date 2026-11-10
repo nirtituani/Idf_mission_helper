@@ -413,3 +413,25 @@ test('a date-range cell merged down several rows gives every row the same dates'
   assert.deepEqual(when('ורד דמה'), ['2026-11-15 08:00 → 2026-11-19 08:00']); // not restarted at the week's start
   assert.equal(r.issues.filter((i) => i.code === 'UNRESOLVED_RANGE').length, 0);
 });
+
+test('a table title merged over the table\'s other columns (not above its first column) is still its title', async () => {
+  const { default: ExcelJS } = await import('exceljs');
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('שיבוץ');
+  // title "מוצב דמה" merged over C1:E1; the header starts one column to its right side, at B2
+  ws.getCell('C1').value = 'מוצב דמה';
+  ws.mergeCells('C1:E1');
+  ['מתאריך – עד', 'מפקד', 'לוחם 1', 'לוחם 2'].forEach((h, i) => (ws.getCell(2, i + 2).value = h));
+  ws.getCell('B3').value = 'ראשון 8.11 08:00 עד רביעי 11.11 08:00';
+  ws.getCell('C3').value = 'אבי דמה';
+  // a second table with no title: nothing above its first column, one plain (unmerged) note above another
+  ws.getCell('C6').value = 'הערה דמה';
+  ['מתאריך – עד', 'נהג'].forEach((h, i) => (ws.getCell(7, i + 2).value = h));
+  ws.getCell('B8').value = 'ראשון 8.11 08:00 עד רביעי 11.11 08:00';
+  ws.getCell('C8').value = 'בני דמה';
+  const r = await parseRoster(await wb.xlsx.writeBuffer(), { fileName: 'f.xlsx', today: '2026-11-10' });
+  assert.equal(find(r, 'אבי דמה')[0].section, 'מוצב דמה');
+  assert.ok(!r.issues.some((i) => i.code === 'UNPARSED_REGION' && i.cells.some((c) => c.includes('C1'))));
+  const untitled = r.issues.filter((i) => i.code === 'MISSING_TITLE');
+  assert.deepEqual(untitled.map((i) => i.cells), [['שיבוץ!B7']]); // points at the table's own header cell
+});

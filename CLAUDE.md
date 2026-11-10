@@ -28,7 +28,8 @@ user's machine.
   allowlist in `server/app.js` (dates, filters, week, shifts).
 
 ## Roster rules (decided with the user — apply to every upload)
-- Tables are found by structure (a "יום" or "מתאריך – עד" header; title = cell above). Must work for
+- Tables are found by structure (a "יום" or "מתאריך – עד" header; title = cell above the first header cell,
+  or else the one merged cell above the table's own columns spanning 2+ of them). Must work for
   any roster in this format, not one specific file. Side-by-side tables are supported.
 - Times are half-open [start, end); end ≤ start = overnight; 24:00 = midnight.
 - Kitchen / tables without an hours column = whole-day duty (00:00–24:00). Kitchen + another duty

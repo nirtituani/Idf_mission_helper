@@ -45,6 +45,21 @@ export function findBlocks(sheet) {
     return { r: h.r, c0: h.c, c1 };
   });
   const headerNear = (r, c0, c1) => headerSpans.some((h) => h.r === r && h.c0 <= c1 && h.c1 >= c0);
+  // The one merged cell in row r that lies within columns c0..c1 and spans at least two of them
+  // (its top-left cell, with the text), or null when there is none or more than one.
+  const mergedTitleAbove = (r, c0, c1) => {
+    const groups = new Map(); // master addr → columns of row r it covers
+    for (const cell of cells.values()) {
+      if (cell.r !== r) continue;
+      const key = cell.masterAddr || cell.addr;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(cell.c);
+    }
+    const found = [...groups].filter(([, cs]) => cs.length >= 2 && Math.min(...cs) >= c0 && Math.max(...cs) <= c1);
+    if (found.length !== 1) return null;
+    const master = [...cells.values()].find((x) => x.addr === found[0][0]);
+    return master?.text ? master : null;
+  };
 
   const blocks = [];
   for (const start of headerStarts) {
@@ -61,10 +76,14 @@ export function findBlocks(sheet) {
       consume(start.r, c);
     }
 
-    const titleCell = get(start.r - 1, start.c);
+    let titleCell = get(start.r - 1, start.c);
     let title = null;
     const c0 = cols[0].c;
     const c1 = cols[cols.length - 1].c;
+    // Nothing above the first header cell: a title merged over the table's other columns counts
+    // ("מוצב" merged over H3:L3 for a table whose header starts at G4). Only a merged cell that lies
+    // within the table's columns and spans at least two of them — never a plain cell.
+    if (!titleCell?.text) titleCell = mergedTitleAbove(start.r - 1, c0, c1) ?? titleCell;
     if (titleCell && titleCell.text && !headerNear(start.r - 1, c0, c1)) {
       title = { text: titleCell.text, addr: titleCell.masterAddr || titleCell.addr };
       for (const cell of cells.values()) {
